@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ramani Desk</title>
+<meta name="description" content="Workspace for architects: client brief to concept plan, material list and cost, approval check, fees and payments.">
+<meta name="theme-color" content="#0f5c78">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ramani">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a site-notebook workspace — project bar on top, four tabs following the architect's own job flow, one working column */
+:root {
+  --bg: #eef1f2;
+  --surface: #ffffff;
+  --ink: #17232b;
+  --muted: #5b6a73;
+  --line: #d3dade;
+  --accent: #0f5c78;
+  --accent-soft: #dcecf2;
+  --wet: #d9ebe4;
+  --ok: #2f7d4f;
+  --warn: #a86a12;
+  --bad: #b3362f;
+  --font-display: "Archivo", system-ui, sans-serif;
+  --font-body: "Archivo", system-ui, sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11181c; --surface: #19232a; --ink: #e5ecef; --muted: #93a3ac; --line: #2c3a42;
+    --accent: #5cb6d6; --accent-soft: #1b3440; --wet: #1e3330; --ok: #6cc391; --warn: #e0a64e; --bad: #f07a71; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11181c; --surface: #19232a; --ink: #e5ecef; --muted: #93a3ac; --line: #2c3a42;
+  --accent: #5cb6d6; --accent-soft: #1b3440; --wet: #1e3330; --ok: #6cc391; --warn: #e0a64e; --bad: #f07a71; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: calc(20px + env(safe-area-inset-top, 0px)) calc(48px + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+}
+.wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1 { font-family: var(--font-display); font-weight: 800; font-size: 1.7rem; margin: 0; letter-spacing: -0.01em; }
+h2 { font-family: var(--font-display); font-size: 1.1rem; margin: 0; text-wrap: balance; }
+.eyebrow { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 0.85rem; }
+.top { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; justify-content: space-between; }
+.top-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 14px; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+label { display: flex; flex-direction: column; gap: 5px; font-weight: 500; font-size: 0.86rem; min-width: 0; }
+label.inline { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; font-size: 0.92rem; }
+input, select, textarea {
+  font: inherit; font-size: 0.95rem; padding: 9px 11px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--ink); width: 100%;
+}
+input[type="number"] { font-family: var(--font-num); }
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+textarea { min-height: 70px; resize: vertical; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button {
+  font: inherit; font-size: 0.88rem; font-weight: 600; border: 1px solid var(--accent); color: var(--accent);
+  background: var(--surface); border-radius: 8px; padding: 8px 14px; cursor: pointer; white-space: nowrap;
+}
+button.primary { background: var(--accent); color: var(--surface); }
+button.danger { border-color: var(--bad); color: var(--bad); }
+button:hover { filter: brightness(1.05); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: transparent; color: var(--muted); padding: 10px 12px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.example-note { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; font-size: 0.9rem; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th { text-align: left; font-weight: 600; color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td.num, th.num { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td input, td select { padding: 6px 8px; font-size: 0.88rem; }
+td input[type="number"] { width: 72px; }
+tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.plan { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--bg); min-width: 0; }
+.plan svg { width: 100%; height: auto; max-height: 460px; display: block; }
+.plan svg .room { fill: var(--surface); stroke: var(--ink); stroke-width: 4; }
+.plan svg .room.wet { fill: var(--wet); }
+.plan svg .cor { fill: var(--accent-soft); stroke: none; }
+.plan svg .outer { fill: none; stroke: var(--ink); stroke-width: 12; }
+.plan svg .dl { stroke: var(--muted); stroke-width: 2; }
+.plan svg text { fill: var(--ink); text-anchor: middle; font-family: var(--font-body); }
+.plan svg .lbl { font-size: 24px; font-weight: 600; }
+.plan svg .dim { font-size: 20px; fill: var(--muted); font-family: var(--font-num); }
+.plan svg .sm { font-size: 16px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.stat { display: flex; flex-direction: column; }
+.stat b { font-family: var(--font-num); font-size: 1.15rem; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.78rem; color: var(--muted); }
+.big { font-family: var(--font-num); font-size: clamp(1.4rem, 5vw, 2rem); font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.pill { display: inline-block; font-size: 0.75rem; font-weight: 600; padding: 2px 9px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.fail { color: var(--bad); } .pill.check { color: var(--warn); }
+.checks { display: grid; gap: 0; }
+.check-row { display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.check-row:last-child { border-bottom: 0; }
+.check-row p { margin: 2px 0 0; color: var(--muted); font-size: 0.86rem; }
+.summary-box { background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; font-size: 0.92rem; }
+.summary-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+details summary { cursor: pointer; font-weight: 600; }
+.stages { display: grid; gap: 6px; }
+.counter { display: flex; align-items: center; gap: 10px; }
+.counter b { font-family: var(--font-num); font-size: 1.3rem; min-width: 2ch; text-align: center; }
+.alert { border-left: 4px solid var(--warn); padding: 8px 12px; background: var(--bg); border-radius: 0 6px 6px 0; font-size: 0.9rem; }
+.hint { font-size: 0.82rem; color: var(--muted); margin: 0; }
+[role="tabpanel"] { display: grid; gap: 16px; }
+.backup-line { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 0.85rem; color: var(--muted); }
+.backup-line.stale { color: var(--warn); }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 0.9rem; z-index: 20; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">Architect's workspace</div>
+      <h1>Ramani Desk</h1>
+    </div>
+    <div class="top-actions">
+      <label for="proj-select">Project
+        <select id="proj-select"></select>
+      </label>
+      <button type="button" id="btn-new">New project</button>
+      <button type="button" id="btn-del" class="danger">Delete</button>
+    </div>
+  </div>
+
+  <div class="backup-line" id="backup-line">
+    <span id="backup-status"></span>
+    <button type="button" id="btn-backup">Back up</button>
+    <button type="button" id="btn-restore">Restore</button>
+    <input type="file" id="restore-file" accept=".json,application/json" hidden>
+  </div>
+
+  <div id="example-note" class="example-note" hidden>This is an example project with sample figures. Start a new project for real work. Everything saves on this device, so use Back up regularly.</div>
+
+  <div class="card">
+    <div class="grid">
+      <label for="f-name">Project name<input id="f-name" data-bind="name"></label>
+      <label for="f-client">Client<input id="f-client" data-bind="client"></label>
+      <label for="f-region">Region
+        <select id="f-region" data-bind="region">
+          <option>Dar es Salaam</option><option>Arusha</option><option>Dodoma</option><option>Mwanza</option><option>Zanzibar</option><option>Other</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" aria-selected="true" data-tab="design" id="t-design">1. Brief &amp; design</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="materials" id="t-materials">2. Materials &amp; cost</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="approval" id="t-approval">3. Approval check</button>
+    <button type="button" role="tab" aria-selected="false" data-tab="fees" id="t-fees">4. Fees &amp; payments</button>
+  </nav>
+
+  <!-- DESIGN -->
+  <section role="tabpanel" id="p-design" aria-labelledby="t-design">
+    <div class="card">
+      <h2>Tell it what the client wants</h2>
+      <label for="f-brief">Client brief
+        <textarea id="f-brief" data-bind="brief"></textarea>
+      </label>
+      <p class="hint">Write it the way you would in your notebook, e.g. "4 bedrooms, master ensuite, 2 floors, plot 20x30, modern finish, office, store, guest toilet".</p>
+      <div><button type="button" class="primary" id="btn-gen">Generate design</button></div>
+      <div class="grid">
+        <label for="f-floors">Floors<input id="f-floors" type="number" min="1" max="4" step="1" data-bind="floors"></label>
+        <label for="f-finish">Finish
+          <select id="f-finish" data-bind="finish"><option value="standard">Standard</option><option value="modern">Modern</option></select>
+        </label>
+        <label for="f-height">Room height (m)<input id="f-height" type="number" min="2" max="5" step="0.1" data-bind="height"></label>
+        <label for="f-pw">Plot width (m)<input id="f-pw" type="number" min="1" step="0.5" data-bind="plotW"></label>
+        <label for="f-pd">Plot depth (m)<input id="f-pd" type="number" min="1" step="0.5" data-bind="plotD"></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="top"><h2>Concept plan</h2><div class="stats" id="design-stats"></div></div>
+      <div class="plans" id="plans"></div>
+      <p class="hint">A first-draft block plan to start sketching from. Rooms in the same row share a depth, so a room can come out deeper than you typed. Adjust sizes in the room schedule below and the plan redraws.</p>
+    </div>
+
+    <div class="card">
+      <div class="top"><h2>Room schedule</h2>
+        <div class="top-actions">
+          <select id="add-type" aria-label="Room type to add"></select>
+          <button type="button" id="btn-add">Add room</button>
+        </div>
+      </div>
+      <div class="scroll"><table id="rooms-table"></table></div>
+    </div>
+  </section>
+
+  <!-- MATERIALS -->
+  <section role="tabpanel" id="p-materials" aria-labelledby="t-materials" hidden>
+    <div class="card">
+      <div class="eyebrow">Estimated building cost</div>
+      <div class="big" id="cost-total"></div>
+      <div class="stats" id="cost-stats"></div>
+      <div id="cost-guide" class="small muted"></div>
+      <div class="grid">
+        <label for="f-lab">Labour (% of materials)<input id="f-lab" type="number" min="0" step="1" data-bind="cost.labour"></label>
+        <label for="f-svc">Plumbing, electrical, doors &amp; fittings (%)<input id="f-svc" type="number" min="0" step="1" data-bind="cost.services"></label>
+        <label for="f-con">Contingency (%)<input id="f-con" type="number" min="0" step="1" data-bind="cost.contingency"></label>
+      </div>
+      <p class="hint">The percentages are starting assumptions. Set them to what you see on your own sites.</p>
+    </div>
+
+    <div class="card">
+      <h2>Material list</h2>
+      <div class="scroll"><table id="mat-table"></table></div>
+      <p class="hint">Rough quantities from rules of thumb, with waste included. The quantity surveyor's bill of quantities replaces this later.</p>
+    </div>
+
+    <div class="card">
+      <div class="summary-box">
+        <div class="summary-head"><strong>For the client</strong><button type="button" id="btn-copy">Copy</button></div>
+        <div id="client-summary"></div>
+      </div>
+    </div>
+
+    <details class="card">
+      <summary>Edit material prices (TZS)</summary>
+      <div class="scroll"><table id="price-table"></table></div>
+      <p class="hint">Starting prices from the Zanzibaba Tanzania Material Price Index, November 2026. Changes apply to all projects on this device.</p>
+      <div><button type="button" id="btn-price-reset">Reset prices</button></div>
+    </details>
+  </section>
+
+  <!-- APPROVAL -->
+  <section role="tabpanel" id="p-approval" aria-labelledby="t-approval" hidden>
+    <div class="card">
+      <div class="top"><h2>Before you submit to Lands</h2><div id="check-score"></div></div>
+      <div class="checks" id="checks"></div>
+    </div>
+    <div class="card">
+      <h2>Site and drainage</h2>
+      <div class="grid">
+        <label for="r-zone">Plot zoned for
+          <select id="r-zone" data-bind="rules.zone"><option>Residential</option><option>Commercial</option><option>Mixed use</option><option>Industrial</option></select>
+        </label>
+        <label for="r-use">Building use
+          <select id="r-use" data-bind="rules.use"><option>Residential</option><option>Commercial</option><option>Mixed use</option><option>Industrial</option></select>
+        </label>
+        <label for="r-perm">Floors allowed<input id="r-perm" type="number" min="1" step="1" data-bind="rules.permFloors"></label>
+      </div>
+      <label class="inline" for="w-sewer"><input type="checkbox" id="w-sewer" data-bind="waste.sewer">Public sewer available at the plot</label>
+      <label class="inline" for="w-septic"><input type="checkbox" id="w-septic" data-bind="waste.septic">Septic tank and soakaway shown on the drawings</label>
+    </div>
+    <details class="card">
+      <summary>Rules used for the check</summary>
+      <div class="grid">
+        <label for="r-h">Min room height (m)<input id="r-h" type="number" step="0.1" data-bind="rules.minHeight"></label>
+        <label for="r-win">Min window, % of floor<input id="r-win" type="number" step="1" data-bind="rules.winPct"></label>
+        <label for="r-bed">Min bedroom area (m²)<input id="r-bed" type="number" step="0.5" data-bind="rules.bedMin"></label>
+        <label for="r-wid">Min room width (m)<input id="r-wid" type="number" step="0.1" data-bind="rules.minWidth"></label>
+        <label for="r-cov">Max plot coverage (%)<input id="r-cov" type="number" step="1" data-bind="rules.coverage"></label>
+        <label for="r-front">Front setback (m)<input id="r-front" type="number" step="0.5" data-bind="rules.front"></label>
+        <label for="r-side">Side setback (m)<input id="r-side" type="number" step="0.5" data-bind="rules.side"></label>
+        <label for="r-rear">Rear setback (m)<input id="r-rear" type="number" step="0.5" data-bind="rules.rear"></label>
+      </div>
+      <p class="hint">Starting values only. Set them to the by-laws of the area you're submitting in.</p>
+    </details>
+  </section>
+
+  <!-- FEES -->
+  <section role="tabpanel" id="p-fees" aria-labelledby="t-fees" hidden>
+    <div class="card">
+      <div class="eyebrow">Due from client now</div>
+      <div class="big" id="owed"></div>
+      <div id="owed-note" class="small muted"></div>
+    </div>
+    <div class="card">
+      <h2>Project stages</h2>
+      <div class="stages" id="stages"></div>
+    </div>
+    <div class="card">
+      <h2>Design fee</h2>
+      <div class="grid">
+        <label for="fee-d">Design fee (TZS)<input id="fee-d" type="number" min="0" step="50000" data-bind="fees.design"></label>
+        <label for="fee-p">Deposit after site visit (%)<input id="fee-p" type="number" min="0" max="100" step="5" data-bind="fees.depositPct"></label>
+        <label for="fee-fr">Free revisions<input id="fee-fr" type="number" min="0" step="1" data-bind="fees.freeRevs"></label>
+        <label for="fee-rf">Fee per extra revision (TZS)<input id="fee-rf" type="number" min="0" step="50000" data-bind="fees.revFee"></label>
+      </div>
+      <div class="counter">
+        <span>Revisions so far</span>
+        <button type="button" id="rev-minus" aria-label="Remove a revision">−</button>
+        <b id="rev-count">0</b>
+        <button type="button" id="rev-plus" aria-label="Add a revision">+</button>
+      </div>
+      <div id="rev-alert"></div>
+    </div>
+    <div class="card">
+      <h2>Site supervision</h2>
+      <div class="grid">
+        <label for="sup-m">Charge by
+          <select id="sup-m" data-bind="fees.supMode"><option value="visit">Per visit</option><option value="pct">Percentage of build cost</option></select>
+        </label>
+        <label for="sup-r">Rate per visit (TZS)<input id="sup-r" type="number" min="0" step="10000" data-bind="fees.supRate"></label>
+        <label for="sup-v">Visits made<input id="sup-v" type="number" min="0" step="1" data-bind="fees.supVisits"></label>
+        <label for="sup-p">Percentage (%)<input id="sup-p" type="number" min="0" step="0.5" data-bind="fees.supPct"></label>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Payments</h2>
+      <div class="scroll"><table id="pay-table"></table></div>
+    </div>
+  </section>
+
+  <footer class="small muted">Ramani Desk 1.0. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+</div>
+
+<script>
+const KEY = "ramani-projects-v1", PKEY = "ramani-prices-v1", CKEY = "ramani-current-v1";
+const TYPES = {
+  living:  { label: "Living room", w: 5.0, d: 4.5, zone: "pub",  hab: true,  win: 15 },
+  dining:  { label: "Dining",      w: 4.0, d: 3.6, zone: "pub",  hab: true,  win: 15 },
+  kitchen: { label: "Kitchen",     w: 3.6, d: 3.0, zone: "pub",  hab: true,  win: 15, wet: true },
+  office:  { label: "Office",      w: 3.0, d: 3.0, zone: "pub",  hab: true,  win: 15 },
+  store:   { label: "Store",       w: 2.0, d: 2.0, zone: "pub",  hab: false, win: 0 },
+  wc:      { label: "Guest WC",    w: 1.5, d: 2.0, zone: "pub",  hab: false, win: 8, wet: true },
+  stair:   { label: "Stairs",      w: 2.4, d: 4.0, zone: "pub",  hab: false, win: 6 },
+  master:  { label: "Master bedroom", w: 4.2, d: 4.0, zone: "priv", hab: true, win: 15, bed: true },
+  bed:     { label: "Bedroom",     w: 3.6, d: 3.3, zone: "priv", hab: true,  win: 15, bed: true },
+  bath:    { label: "Bathroom",    w: 2.0, d: 2.4, zone: "priv", hab: false, win: 8, wet: true }
+};
+const PRICE_DEFAULTS = {
+  cement:   { label: "Cement OPC 32.5N", unit: "bag", price: 21000 },
+  block6:   { label: "Hollow block 6\"", unit: "pc", price: 1700 },
+  hardcore: { label: "Hardcore", unit: "t", price: 60000 },
+  rsand:    { label: "River sand", unit: "t", price: 38000 },
+  psand:    { label: "Plaster sand", unit: "t", price: 42000 },
+  ballast:  { label: "Ballast 20 mm", unit: "t", price: 63000 },
+  brc:      { label: "BRC mesh A98", unit: "sheet", price: 48000 },
+  y12:      { label: "Rebar Y12 (12 m)", unit: "pc", price: 21000 },
+  y10:      { label: "Rebar Y10 (12 m)", unit: "pc", price: 12500 },
+  y8:       { label: "Rebar Y8 (12 m)", unit: "pc", price: 8500 },
+  t4x2:     { label: "Cypress 4×2 (3 m)", unit: "pc", price: 14500 },
+  t2x2:     { label: "Cypress 2×2 (3 m)", unit: "pc", price: 9500 },
+  ibr4:     { label: "IBR sheet 0.4 mm", unit: "lin m", price: 6800 },
+  ibr5:     { label: "IBR sheet 0.5 mm", unit: "lin m", price: 9100 },
+  ridge:    { label: "Ridge cap 2 m", unit: "pc", price: 9500 },
+  nails:    { label: "Roofing nails 25 kg", unit: "box", price: 70000 },
+  ceramic:  { label: "Ceramic floor tile 60×60", unit: "m²", price: 26000 },
+  porcelain:{ label: "Porcelain tile 60×60", unit: "m²", price: 28000 },
+  walltile: { label: "Wall tile 25×40", unit: "m²", price: 17000 },
+  adhesive: { label: "Tile adhesive 25 kg", unit: "bag", price: 28000 },
+  emulsion: { label: "Interior emulsion 20 L", unit: "tin", price: 105000 },
+  weather:  { label: "Weather-guard paint 20 L", unit: "tin", price: 135000 },
+  winSlide: { label: "Sliding aluminium window", unit: "m²", price: 275000 },
+  winCase:  { label: "Casement aluminium window", unit: "m²", price: 310000 }
+};
+const STAGES = [
+  "Client briefing", "Site visit (deposit due)", "Design brief with client", "Sketches",
+  "Drawings and 3D", "Presentation to client (balance due)", "Changes and final draft", "Engineer, QS and Lands approval"
+];
+const GUIDE = { standard: [550000, 750000], modern: [800000, 1200000] };
+
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString("en-US");
+const tzs = n => "TZS " + fmt(n);
+const short = n => n >= 1e9 ? (n / 1e9).toFixed(2) + " bn" : n >= 1e6 ? (n / 1e6).toFixed(1) + " M" : fmt(n);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function load(k, d) { try { const v = JSON.parse(localStorage.getItem(k) || "null"); return v == null ? d : v; } catch (e) { return d; } }
+function store(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+let uid = Date.now();
+const newId = () => (uid++).toString(36);
+
+/* ---------- Brief parsing and room generation ---------- */
+const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, single: 1, double: 2 };
+function parseBrief(text) {
+  let t = " " + text.toLowerCase().replace(/\b(one|two|three|four|five|six|single|double)\b/g, w => WORDS[w]) + " ";
+  const o = { beds: 3, floors: 1, ensuite: false, baths: null, office: false, store: false, wc: false, dining: true, finish: null, plot: null };
+  let m;
+  if ((m = t.match(/(\d+)\s*-?\s*(?:bed|bedroom|bedrooms|br)\b/))) o.beds = +m[1];
+  if ((m = t.match(/(\d+)\s*-?\s*(?:floor|floors|storey|storeys|story|stories|level|levels)\b/))) o.floors = +m[1];
+  if ((m = t.match(/(\d+)\s*-?\s*(?:bath|baths|bathroom|bathrooms)\b/))) o.baths = +m[1];
+  if ((m = t.match(/plot\D{0,10}(\d+(?:\.\d+)?)\s*m?\s*(?:x|×|\*|by)\s*(\d+(?:\.\d+)?)/))) o.plot = [+m[1], +m[2]];
+  o.ensuite = /en-?suite|ensuite|self[- ]contained/.test(t);
+  o.office = /office|study/.test(t);
+  o.store = /\b(store|storeroom|pantry)\b/.test(t);
+  o.wc = /guest (wc|toilet)|visitors? (wc|toilet)|powder room/.test(t);
+  if (/no dining/.test(t)) o.dining = false;
+  if (/modern|high[- ]end|luxury|premium/.test(t)) o.finish = "modern";
+  else if (/standard|basic|simple/.test(t)) o.finish = "standard";
+  o.beds = Math.min(Math.max(o.beds, 0), 8);
+  o.floors = Math.min(Math.max(o.floors, 1), 4);
+  return o;
+}
+function room(type, name, floor) {
+  const T = TYPES[type];
+  return { id: newId(), type, name: name || T.label, floor, w: T.w, d: T.d, win: T.win };
+}
+function generateRooms(o) {
+  const up = o.floors > 1 ? 1 : 0;
+  const rooms = [room("living", null, 0)];
+  if (o.dining) rooms.push(room("dining", null, 0));
+  rooms.push(room("kitchen", null, 0));
+  if (o.office) rooms.push(room("office", null, 0));
+  if (o.store) rooms.push(room("store", null, 0));
+  if (o.wc || o.floors > 1) rooms.push(room("wc", null, 0));
+  if (o.floors > 1) for (let f = 0; f < o.floors - 1; f++) rooms.push(room("stair", null, f));
+  let bedNo = 1, ensuites = 0;
+  if (o.beds > 0) {
+    rooms.push(room(o.ensuite ? "master" : "bed", o.ensuite ? "Master bedroom" : "Bedroom 1", up));
+    if (o.ensuite) { rooms.push(room("bath", "En-suite", up)); ensuites = 1; }
+    for (let i = 2; i <= o.beds; i++) {
+      const f = o.floors > 1 ? 1 + ((i - 2) % (o.floors - 1)) : 0;
+      rooms.push(room("bed", "Bedroom " + i, f));
+    }
+    bedNo = o.beds;
+  }
+  let shared = o.baths != null ? Math.max(o.baths - ensuites, 0) : (o.beds >= 4 ? 2 : o.beds > 0 ? 1 : 0);
+  for (let i = 1; i <= shared; i++) rooms.push(room("bath", shared > 1 ? "Bathroom " + i : "Bathroom", up));
+  return rooms;
+}
+
+/* ---------- Layout ---------- */
+function layout(p) {
+  const out = [];
+  for (let f = 0; f < p.floors; f++) {
+    const rs = p.rooms.filter(r => r.floor === f);
+    let A = rs.filter(r => TYPES[r.type].zone === "pub"), B = rs.filter(r => TYPES[r.type].zone === "priv");
+    if (!A.length && B.length > 1) { A = B.filter((_, i) => i % 2 === 0); B = B.filter((_, i) => i % 2 === 1); }
+    else if (!B.length && A.length > 1) { B = A.filter((_, i) => i % 2 === 1); A = A.filter((_, i) => i % 2 === 0); }
+    const rowW = a => a.reduce((s, r) => s + (+r.w || 0), 0);
+    const rowD = a => a.reduce((m, r) => Math.max(m, +r.d || 0), 0);
+    const W = Math.max(rowW(A), rowW(B));
+    const dA = rowD(A), dB = rowD(B);
+    const cor = (A.length && B.length) ? 1.2 : 0;
+    const rects = [];
+    const place = (row, y, d) => {
+      let x = 0; const tw = rowW(row);
+      row.forEach((r, i) => { const w = (+r.w || 0) + (i === row.length - 1 ? W - tw : 0); rects.push({ r, x, y, w, d }); x += +r.w || 0; });
+    };
+    place(A, 0, dA); place(B, dA + cor, dB);
+    out.push({ f, W, D: dA + cor + dB, rects, cor: cor ? { y: dA, h: cor } : null });
+  }
+  return out;
+}
+const floorName = f => f === 0 ? "Ground floor" : f === 1 ? "First floor" : f === 2 ? "Second floor" : "Floor " + (f + 1);
+
+function planSVG(fl) {
+  if (!fl.W || !fl.D) return '<p class="hint">No rooms on this floor yet.</p>';
+  const S = 100, pad = 70, W = fl.W * S, D = fl.D * S;
+  let s = `<svg viewBox="${-pad} ${-pad} ${W + pad + 20} ${D + pad + 20}" role="img" aria-label="${floorName(fl.f)} concept plan">`;
+  if (fl.cor) s += `<rect class="cor" x="0" y="${fl.cor.y * S}" width="${W}" height="${fl.cor.h * S}"/><text class="dim sm" x="${W / 2}" y="${(fl.cor.y + fl.cor.h / 2) * S + 6}">Corridor 1.2 m</text>`;
+  fl.rects.forEach(x => {
+    const cx = (x.x + x.w / 2) * S, cy = (x.y + x.d / 2) * S, small = x.w < 2.6 || x.d < 2.4;
+    s += `<rect class="room${TYPES[x.r.type].wet ? " wet" : ""}" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
+    s += `<text class="lbl${small ? " sm" : ""}" x="${cx}" y="${cy - (small ? 4 : 8)}">${esc(small ? x.r.name.replace("bedroom", "bed").replace("Bathroom", "Bath") : x.r.name)}</text>`;
+    s += `<text class="dim${small ? " sm" : ""}" x="${cx}" y="${cy + (small ? 16 : 22)}">${x.w.toFixed(1)}×${x.d.toFixed(1)}</text>`;
+  });
+  s += `<rect class="outer" x="0" y="0" width="${W}" height="${D}"/>`;
+  s += `<line class="dl" x1="0" y1="-30" x2="${W}" y2="-30"/><line class="dl" x1="0" y1="-40" x2="0" y2="-20"/><line class="dl" x1="${W}" y1="-40" x2="${W}" y2="-20"/>`;
+  s += `<text class="dim" x="${W / 2}" y="-40">${fl.W.toFixed(2)} m</text>`;
+  s += `<line class="dl" x1="-30" y1="0" x2="-30" y2="${D}"/><line class="dl" x1="-40" y1="0" x2="-20" y2="0"/><line class="dl" x1="-40" y1="${D}" x2="-20" y2="${D}"/>`;
+  s += `<text class="dim" transform="translate(-40 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
+  return s + "</svg>";
+}
+
+/* ---------- Quantities and cost ---------- */
+function quantities(p, L) {
+  const H = +p.height || 3;
+  const q = {};
+  let total = 0, ext = 0, intl = 0, win = 0, doors = 0, wetWall = 0, strip = 0, slabG = 0, slabS = 0, ring = 0, cols = 0, top = null, hasKitchen = false;
+  L.forEach((fl, i) => {
+    if (!fl.W || !fl.D) return;
+    const foot = fl.W * fl.D, per = 2 * (fl.W + fl.D);
+    const sumPer = fl.rects.reduce((s, x) => s + 2 * (x.w + x.d), 0) + (fl.cor ? 2 * (fl.W + fl.cor.h) : 0);
+    const internal = Math.max(0, (sumPer - per) / 2);
+    total += foot; ext += per; intl += internal;
+    fl.rects.forEach(x => {
+      win += x.w * x.d * (+x.r.win || 0) / 100; doors++;
+      if (x.r.type === "bath" || x.r.type === "wc") wetWall += 2 * (x.w + x.d) * 2.1;
+      if (x.r.type === "kitchen") hasKitchen = true;
+    });
+    if (i === 0) { strip = (per + internal) * 0.6 * 0.25; slabG = foot * 0.1; q.hardcore = foot * 0.15 * 1.9; q.brc = foot / 10.5; }
+    else slabS += foot * 0.15;
+    ring += per; cols += Math.ceil(per / 3.5);
+    top = fl;
+  });
+  if (!total) return { q: {}, total: 0, rows: [] };
+  if (hasKitchen) wetWall += 3;
+  const gross = (ext + intl) * H, open = win + doors * 1.9, net = Math.max(gross - open, 0), ratio = gross ? net / gross : 0;
+  const extNet = ext * H * ratio, intNet = intl * H * ratio, plaster = 2 * intNet + 2 * extNet;
+  const c124 = slabG + slabS * 1.1 + ring * 0.2 * 0.2 + cols * 0.2 * 0.2 * H;
+  const mortarBags = net * 0.12 + plaster * 0.11 + total * 0.25;
+  q.cement = strip * 4.5 + c124 * 6.5 + mortarBags;
+  q.block6 = net * 10 * 1.05;
+  q.rsand = (strip + c124) * 0.7;
+  q.psand = mortarBags * 0.22;
+  q.ballast = (strip + c124) * 1.3;
+  const slabKg = slabS * 110;
+  q.y12 = slabKg * 0.7 / 10.66 + ring * 4 * 1.1 / 12 + cols * 4 * (H + 0.6) / 12;
+  q.y10 = slabKg * 0.3 / 7.4;
+  q.y8 = (ring / 0.2) * 0.8 / 12 + cols * (H / 0.2) * 0.8 / 12;
+  const roof = top.W * top.D * 1.3;
+  q[p.finish === "modern" ? "ibr5" : "ibr4"] = roof / 0.686 * 1.08;
+  q.ridge = Math.max(top.W, top.D) / 1.8;
+  q.nails = roof / 250;
+  q.t4x2 = roof * 0.6;
+  q.t2x2 = roof * 0.9;
+  q[p.finish === "modern" ? "porcelain" : "ceramic"] = total * 1.08;
+  q.walltile = wetWall * 1.1;
+  q.adhesive = (total * 1.08 + wetWall * 1.1) / 5;
+  q.emulsion = (intNet * 2 + extNet + total) / 40;
+  q.weather = extNet / 40;
+  q[p.finish === "modern" ? "winCase" : "winSlide"] = win;
+  return { q, total, win, net, roof };
+}
+const GROUPS = [
+  ["Foundation and structure", ["hardcore", "cement", "rsand", "ballast", "brc", "y12", "y10", "y8"]],
+  ["Walls and plaster", ["block6", "psand"]],
+  ["Roof", ["t4x2", "t2x2", "ibr4", "ibr5", "ridge", "nails"]],
+  ["Finishes", ["ceramic", "porcelain", "walltile", "adhesive", "emulsion", "weather"]],
+  ["Windows", ["winSlide", "winCase"]]
+];
+function costOf(p, Q, prices) {
+  const lines = [];
+  let mat = 0;
+  GROUPS.forEach(([g, keys]) => keys.forEach(k => {
+    if (!Q.q[k]) return;
+    const unit = PRICE_DEFAULTS[k].unit;
+    const qty = (unit === "m²" || unit === "t" || unit === "lin m") ? Math.ceil(Q.q[k] * 10) / 10 : Math.ceil(Q.q[k]);
+    const amt = qty * (prices[k] ?? PRICE_DEFAULTS[k].price);
+    mat += amt; lines.push({ g, k, qty, unit, price: prices[k] ?? PRICE_DEFAULTS[k].price, amt });
+  }));
+  const c = p.cost;
+  const labour = mat * (+c.labour || 0) / 100, services = mat * (+c.services || 0) / 100;
+  const sub = mat + labour + services, cont = sub * (+c.contingency || 0) / 100;
+  return { lines, mat, labour, services, cont, total: sub + cont };
+}
+
+/* ---------- Approval checks ---------- */
+function checks(p, L) {
+  const R = p.rules, out = [];
+  const add = (status, title, note) => out.push({ status, title, note });
+  const g = L[0] || { W: 0, D: 0 };
+  add(+p.height >= +R.minHeight ? "ok" : "fail", "Room height", `${(+p.height).toFixed(2)} m against a minimum of ${(+R.minHeight).toFixed(2)} m for ventilation.`);
+  const all = L.flatMap(fl => fl.rects);
+  const lowWin = all.filter(x => TYPES[x.r.type].hab && (+x.r.win || 0) < +R.winPct);
+  add(lowWin.length ? "fail" : "ok", "Windows for light and air",
+    lowWin.length ? "Too little window in: " + lowWin.map(x => x.r.name).join(", ") + `. Habitable rooms need at least ${R.winPct}% of floor area.` : `Every habitable room has at least ${R.winPct}% of its floor area as window.`);
+  const smallBeds = all.filter(x => TYPES[x.r.type].bed && x.w * x.d < +R.bedMin);
+  const narrow = all.filter(x => TYPES[x.r.type].hab && Math.min(x.w, x.d) < +R.minWidth);
+  const sizeIssues = [...smallBeds.map(x => `${x.r.name} is ${(x.w * x.d).toFixed(1)} m²`), ...narrow.map(x => `${x.r.name} is ${Math.min(x.w, x.d).toFixed(1)} m wide`)];
+  add(sizeIssues.length ? "fail" : "ok", "Room sizes", sizeIssues.length ? sizeIssues.join("; ") + "." : `Bedrooms are at least ${R.bedMin} m² and habitable rooms at least ${R.minWidth} m wide.`);
+  const plotA = (+p.plotW || 0) * (+p.plotD || 0), cov = plotA ? g.W * g.D / plotA * 100 : 0;
+  add(!plotA ? "check" : cov <= +R.coverage ? "ok" : "fail", "Plot coverage",
+    plotA ? `Building covers ${cov.toFixed(0)}% of the plot; the limit used is ${R.coverage}%.` : "Enter the plot size on the design tab.");
+  const sideRoom = ((+p.plotW || 0) - g.W) / 2, depthRoom = (+p.plotD || 0) - g.D, needD = +R.front + +R.rear;
+  add(!plotA ? "check" : (sideRoom >= +R.side && depthRoom >= needD) ? "ok" : "fail", "Setbacks",
+    plotA ? `${sideRoom.toFixed(1)} m each side (needs ${R.side} m); ${depthRoom.toFixed(1)} m front and rear together (needs ${needD} m).` : "Enter the plot size on the design tab.");
+  add(+p.floors <= +R.permFloors ? "ok" : "fail", "Number of floors", `${p.floors} designed; ${R.permFloors} allowed in this zone.`);
+  add(R.use === R.zone ? "ok" : "fail", "Land use", R.use === R.zone ? `${R.use} building on a ${R.zone.toLowerCase()} plot.` : `${R.use} building on a plot zoned ${R.zone.toLowerCase()}. Lands will send this back unless there's a change of use.`);
+  if (p.waste.sewer) add("ok", "Wastewater", "Connect to the public sewer. Show the connection on the drawings.");
+  else add(p.waste.septic ? "ok" : "fail", "Wastewater", p.waste.septic ? "Septic tank and soakaway are on the drawings." : "No sewer at the plot, so the drawings need a septic tank and soakaway. This is a common reason for rejection.");
+  return out;
+}
+
+/* ---------- Fees ---------- */
+function fees(p, buildCost) {
+  const F = p.fees, s = p.stages;
+  const deposit = (+F.design || 0) * (+F.depositPct || 0) / 100, balance = (+F.design || 0) - deposit;
+  const extra = Math.max(0, (+F.revsUsed || 0) - (+F.freeRevs || 0));
+  const revAmt = extra * (+F.revFee || 0);
+  const sup = F.supMode === "pct" ? buildCost * (+F.supPct || 0) / 100 : (+F.supRate || 0) * (+F.supVisits || 0);
+  const lines = [
+    { key: "deposit", label: `Deposit (${F.depositPct}%)`, amt: deposit, due: !!s[1], when: "after the site visit" },
+    { key: "balance", label: "Design balance", amt: balance, due: !!s[5], when: "after the presentation" },
+    { key: "revisions", label: `Extra revisions (${extra})`, amt: revAmt, due: revAmt > 0, when: "when a revision beyond the free ones is made" },
+    { key: "supervision", label: F.supMode === "pct" ? `Supervision (${F.supPct}% of build)` : `Supervision (${F.supVisits || 0} visits)`, amt: sup, due: F.supMode === "pct" ? !!s[7] : sup > 0, when: F.supMode === "pct" ? "once building starts" : "per visit" }
+  ];
+  const owed = lines.filter(l => l.due && !F.paid[l.key] && l.amt > 0).reduce((t, l) => t + l.amt, 0);
+  return { lines, owed, extra };
+}
+
+/* ---------- State ---------- */
+function defaultRules() { return { minHeight: 2.7, winPct: 10, bedMin: 7.5, minWidth: 2.4, coverage: 40, front: 5, side: 3, rear: 3, permFloors: 2, zone: "Residential", use: "Residential" }; }
+function makeProject(name, brief, example) {
+  const o = parseBrief(brief);
+  return {
+    id: newId(), name, client: example ? "Example client" : "", region: "Dar es Salaam", example: !!example, brief,
+    floors: o.floors, finish: o.finish || "standard", height: 3.0, plotW: o.plot ? o.plot[0] : 20, plotD: o.plot ? o.plot[1] : 30,
+    rooms: generateRooms(o), rules: defaultRules(), waste: { sewer: false, septic: false },
+    cost: { labour: 30, services: 15, contingency: 10 },
+    fees: { design: example ? 3000000 : 0, depositPct: 50, freeRevs: 2, revsUsed: example ? 1 : 0, revFee: example ? 300000 : 0,
+      supMode: "visit", supRate: example ? 150000 : 0, supVisits: 0, supPct: 3, paid: { deposit: !!example, balance: false, revisions: false, supervision: false } },
+    stages: example ? [true, true, true, true, true, false, false, false] : STAGES.map(() => false)
+  };
+}
+let projects = load(KEY, null);
+if (!Array.isArray(projects) || !projects.length) projects = [makeProject("Example: 3-bedroom house, Mbezi", "3 bedrooms, master ensuite, 1 floor, plot 20x30, standard finish, store", true)];
+let prices = { ...Object.fromEntries(Object.entries(PRICE_DEFAULTS).map(([k, v]) => [k, v.price])), ...load(PKEY, {}) };
+let currentId = load(CKEY, projects[0].id);
+let P = projects.find(p => p.id === currentId) || projects[0];
+const persist = () => { store(KEY, projects); store(CKEY, P.id); };
+
+function getPath(o, path) { return path.split(".").reduce((a, k) => a == null ? a : a[k], o); }
+function setPath(o, path, v) { const ks = path.split("."); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; }
+
+/* ---------- Rendering ---------- */
+function renderProjectSelect() {
+  $("proj-select").innerHTML = projects.map(p => `<option value="${p.id}"${p.id === P.id ? " selected" : ""}>${esc(p.name || "Untitled project")}</option>`).join("");
+  $("example-note").hidden = !P.example;
+}
+function fillBound() {
+  document.querySelectorAll("[data-bind]").forEach(el => {
+    const v = getPath(P, el.dataset.bind);
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+  });
+}
+function renderRooms() {
+  const floorOpts = f => Array.from({ length: P.floors }, (_, i) => `<option value="${i}"${i === f ? " selected" : ""}>${floorName(i)}</option>`).join("");
+  $("rooms-table").innerHTML = `<thead><tr><th>Room</th><th>Floor</th><th class="num">Width m</th><th class="num">Depth m</th><th class="num">Window %</th><th></th></tr></thead><tbody>` +
+    P.rooms.map(r => `<tr>
+      <td><input aria-label="Room name" id="rn-${r.id}" data-room="${r.id}" data-field="name" value="${esc(r.name)}"></td>
+      <td><select aria-label="Floor" id="rf-${r.id}" data-room="${r.id}" data-field="floor">${floorOpts(r.floor)}</select></td>
+      <td class="num"><input aria-label="Width" id="rw-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="w" value="${r.w}"></td>
+      <td class="num"><input aria-label="Depth" id="rd-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="d" value="${r.d}"></td>
+      <td class="num"><input aria-label="Window percent" id="rp-${r.id}" type="number" step="1" min="0" data-room="${r.id}" data-field="win" value="${r.win}"></td>
+      <td><button type="button" class="danger" data-del-room="${r.id}" aria-label="Remove ${esc(r.name)}">×</button></td></tr>`).join("") + "</tbody>";
+}
+function renderPrices() {
+  $("price-table").innerHTML = `<thead><tr><th>Material</th><th>Unit</th><th class="num">Price TZS</th></tr></thead><tbody>` +
+    Object.entries(PRICE_DEFAULTS).map(([k, v]) => `<tr><td>${v.label}</td><td>${v.unit}</td><td class="num"><input aria-label="${esc(v.label)} price" id="pr-${k}" type="number" step="100" data-price="${k}" value="${prices[k]}" style="width:110px"></td></tr>`).join("") + "</tbody>";
+}
+function renderStages() {
+  $("stages").innerHTML = STAGES.map((s, i) => `<label class="inline" for="st-${i}"><input type="checkbox" id="st-${i}" data-stage="${i}"${P.stages[i] ? " checked" : ""}>${i + 1}. ${s}</label>`).join("");
+}
+let lastSummary = "";
+function renderOutputs() {
+  const L = layout(P);
+  // design
+  $("plans").innerHTML = L.map(fl => `<div class="plan"><div class="eyebrow">${floorName(fl.f)}</div>${planSVG(fl)}</div>`).join("");
+  const Q = quantities(P, L), C = costOf(P, Q, prices);
+  const g = L[0] || { W: 0, D: 0 };
+  const beds = P.rooms.filter(r => TYPES[r.type].bed).length;
+  $("design-stats").innerHTML = [
+    [Q.total ? Q.total.toFixed(0) + " m²" : "–", "total floor area"],
+    [g.W ? `${g.W.toFixed(1)} × ${g.D.toFixed(1)} m` : "–", "ground footprint"],
+    [beds, beds === 1 ? "bedroom" : "bedrooms"]
+  ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join("");
+  // materials
+  let html = `<thead><tr><th>Item</th><th class="num">Qty</th><th>Unit</th><th class="num">Unit price</th><th class="num">Amount</th></tr></thead><tbody>`;
+  let cur = "";
+  C.lines.forEach(l => {
+    if (l.g !== cur) { cur = l.g; html += `<tr class="group"><td colspan="5">${l.g}</td></tr>`; }
+    html += `<tr><td>${PRICE_DEFAULTS[l.k].label}</td><td class="num">${l.unit === "m²" || l.unit === "t" || l.unit === "lin m" ? l.qty.toFixed(1) : fmt(l.qty)}</td><td>${l.unit}</td><td class="num">${fmt(l.price)}</td><td class="num">${fmt(l.amt)}</td></tr>`;
+  });
+  html += `<tr><td><b>Materials total</b></td><td></td><td></td><td></td><td class="num"><b>${fmt(C.mat)}</b></td></tr></tbody>`;
+  $("mat-table").innerHTML = html;
+  $("cost-total").textContent = Q.total ? tzs(C.total) : "Add rooms to see a cost";
+  const perM = Q.total ? C.total / Q.total : 0;
+  $("cost-stats").innerHTML = [
+    [short(C.mat), "materials"], [short(C.labour), "labour"], [short(C.services), "services & fittings"], [short(C.cont), "contingency"], [perM ? short(perM) : "–", "per m²"]
+  ].map(([b, s]) => `<div class="stat"><b>${b}</b><span>${s}</span></div>`).join("");
+  const G = GUIDE[P.finish];
+  $("cost-guide").textContent = perM ? `Market guide for ${P.finish} finish: TZS ${short(G[0])} to ${short(G[1])} per m². This estimate is ${perM < G[0] ? "below" : perM > G[1] ? "above" : "within"} that range.` : "";
+  const name = P.name || "This project";
+  lastSummary = `${name}${P.region ? " (" + P.region + ")" : ""}: ${beds}-bedroom, ${P.floors === 1 ? "single-storey" : P.floors + "-storey"} house of about ${Q.total.toFixed(0)} m², ${P.finish} finish. Estimated building cost about ${tzs(C.total)} (around TZS ${short(perM)} per m²), including labour, services and a ${P.cost.contingency}% contingency. This is an early estimate; the final figure comes from the quantity surveyor's bill of quantities. Material changes during construction are the most common reason budgets go over.`;
+  $("client-summary").textContent = lastSummary;
+  // approval
+  const K = checks(P, L);
+  const labels = { ok: "Pass", fail: "Fix", check: "Check" };
+  $("checks").innerHTML = K.map(k => `<div class="check-row"><span class="pill ${k.status}">${labels[k.status]}</span><div><b>${k.title}</b><p>${esc(k.note)}</p></div></div>`).join("");
+  const fails = K.filter(k => k.status === "fail").length;
+  $("check-score").innerHTML = fails ? `<span class="pill fail">${fails} to fix</span>` : `<span class="pill ok">Ready to submit</span>`;
+  // fees
+  const Fz = fees(P, C.total);
+  $("rev-count").textContent = P.fees.revsUsed || 0;
+  $("rev-alert").innerHTML = Fz.extra > 0
+    ? `<div class="alert">${Fz.extra} revision${Fz.extra > 1 ? "s are" : " is"} beyond the ${P.fees.freeRevs} free ones: ${tzs(Fz.extra * (+P.fees.revFee || 0))} to charge.</div>`
+    : (+P.fees.revsUsed || 0) === +P.fees.freeRevs ? `<div class="alert">Free revisions used up. The next one is chargeable.</div>` : "";
+  $("pay-table").innerHTML = `<thead><tr><th>Item</th><th>Due</th><th class="num">Amount</th><th>Paid</th></tr></thead><tbody>` +
+    Fz.lines.map(l => `<tr><td>${l.label}</td><td>${l.amt <= 0 ? '<span class="muted">–</span>' : l.due ? '<span class="pill fail">Due now</span>' : `<span class="muted small">${l.when}</span>`}</td><td class="num">${fmt(l.amt)}</td>
+      <td><input type="checkbox" id="pay-${l.key}" aria-label="${esc(l.label)} paid" data-bind="fees.paid.${l.key}"${P.fees.paid[l.key] ? " checked" : ""}></td></tr>`).join("") + "</tbody>";
+  $("owed").textContent = tzs(Fz.owed);
+  $("owed-note").textContent = Fz.owed > 0 ? "Collect this before moving to the next stage." : "Nothing outstanding right now.";
+}
+function renderAll() { renderProjectSelect(); fillBound(); renderRooms(); renderStages(); renderOutputs(); }
+
+/* ---------- Events ---------- */
+document.addEventListener("input", e => {
+  const el = e.target;
+  if (el.dataset.bind) {
+    let v = el.type === "checkbox" ? el.checked : el.type === "number" ? (el.value === "" ? 0 : +el.value) : el.value;
+    if (el.dataset.bind === "floors") {
+      v = Math.min(Math.max(Math.round(v) || 1, 1), 4);
+      P.rooms.forEach(r => { if (r.floor > v - 1) r.floor = v - 1; });
+      setPath(P, "floors", v); renderRooms();
+    } else setPath(P, el.dataset.bind, v);
+    if (el.dataset.bind === "name") { P.example = false; renderProjectSelect(); }
+  } else if (el.dataset.room) {
+    const r = P.rooms.find(x => x.id === el.dataset.room); if (!r) return;
+    const f = el.dataset.field;
+    r[f] = f === "name" ? el.value : +el.value;
+  } else if (el.dataset.price) {
+    prices[el.dataset.price] = +el.value || 0; store(PKEY, prices);
+  } else if (el.dataset.stage) {
+    P.stages[+el.dataset.stage] = el.checked;
+  } else return;
+  persist(); renderOutputs();
+});
+document.addEventListener("change", e => { if (e.target.dataset.room && e.target.dataset.field === "floor") { persist(); renderOutputs(); } });
+document.addEventListener("click", e => {
+  const t = e.target.closest("button"); if (!t) return;
+  if (t.dataset.tab) {
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b === t ? "true" : "false"));
+    ["design", "materials", "approval", "fees"].forEach(n => $("p-" + n).hidden = n !== t.dataset.tab);
+  } else if (t.dataset.delRoom) {
+    P.rooms = P.rooms.filter(r => r.id !== t.dataset.delRoom); persist(); renderRooms(); renderOutputs();
+  }
+});
+$("btn-gen").addEventListener("click", () => {
+  const o = parseBrief(P.brief || "");
+  P.floors = o.floors; if (o.finish) P.finish = o.finish; if (o.plot) { P.plotW = o.plot[0]; P.plotD = o.plot[1]; }
+  P.rooms = generateRooms(o); persist(); fillBound(); renderRooms(); renderOutputs();
+});
+const addSel = $("add-type");
+addSel.innerHTML = Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+$("btn-add").addEventListener("click", () => {
+  const type = addSel.value, n = P.rooms.filter(r => r.type === type).length + 1;
+  P.rooms.push(room(type, n > 1 && type !== "master" ? TYPES[type].label + " " + n : TYPES[type].label, 0));
+  persist(); renderRooms(); renderOutputs();
+});
+$("rev-plus").addEventListener("click", () => { P.fees.revsUsed = (+P.fees.revsUsed || 0) + 1; persist(); renderOutputs(); });
+$("rev-minus").addEventListener("click", () => { P.fees.revsUsed = Math.max(0, (+P.fees.revsUsed || 0) - 1); persist(); renderOutputs(); });
+$("proj-select").addEventListener("change", e => { P = projects.find(p => p.id === e.target.value) || projects[0]; persist(); renderAll(); });
+$("btn-new").addEventListener("click", () => {
+  P = makeProject("New project", "3 bedrooms, 1 floor, plot 15x25, standard finish", false);
+  projects.push(P); persist(); renderAll(); $("f-name").focus(); $("f-name").select();
+});
+let delTimer = null;
+$("btn-del").addEventListener("click", () => {
+  const b = $("btn-del");
+  if (!delTimer) { b.textContent = "Tap again to delete"; delTimer = setTimeout(() => { b.textContent = "Delete"; delTimer = null; }, 3000); return; }
+  clearTimeout(delTimer); delTimer = null; b.textContent = "Delete";
+  projects = projects.filter(p => p.id !== P.id);
+  if (!projects.length) projects = [makeProject("New project", "3 bedrooms, 1 floor, plot 15x25, standard finish", false)];
+  P = projects[0]; persist(); renderAll();
+});
+$("btn-price-reset").addEventListener("click", () => {
+  prices = Object.fromEntries(Object.entries(PRICE_DEFAULTS).map(([k, v]) => [k, v.price]));
+  try { localStorage.removeItem(PKEY); } catch (e) {}
+  renderPrices(); renderOutputs();
+});
+$("btn-copy").addEventListener("click", async () => {
+  const b = $("btn-copy");
+  try { await navigator.clipboard.writeText(lastSummary); b.textContent = "Copied"; }
+  catch (e) { const r = document.createRange(); r.selectNodeContents($("client-summary")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected"; }
+  setTimeout(() => b.textContent = "Copy", 1500);
+});
+
+/* ---------- Backup and restore ---------- */
+const BKEY = "ramani-lastbackup-v1";
+function toast(msg) { const t = document.createElement("div"); t.className = "toast"; t.setAttribute("role", "status"); t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3500); }
+function renderBackup() {
+  const last = load(BKEY, null), line = $("backup-line");
+  if (!last) { $("backup-status").textContent = "Not backed up yet."; line.classList.add("stale"); return; }
+  const days = Math.floor((Date.now() - last) / 86400000);
+  $("backup-status").textContent = "Last backup: " + (days === 0 ? "today" : days === 1 ? "yesterday" : days + " days ago") + ".";
+  line.classList.toggle("stale", days >= 7);
+}
+$("btn-backup").addEventListener("click", () => {
+  const data = { app: "ramani-desk", version: 1, exported: new Date().toISOString(), projects, prices };
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "ramani-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  store(BKEY, Date.now()); renderBackup();
+  toast("Backup saved to your downloads. Keep it somewhere safe, like Google Drive or WhatsApp to yourself.");
+});
+$("btn-restore").addEventListener("click", () => $("restore-file").click());
+$("restore-file").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (data.app !== "ramani-desk" || !Array.isArray(data.projects)) throw new Error("bad");
+    let added = 0, updated = 0;
+    data.projects.forEach(np => {
+      const i = projects.findIndex(p => p.id === np.id);
+      if (i >= 0) { projects[i] = np; updated++; } else { projects.push(np); added++; }
+    });
+    if (data.prices) { prices = { ...prices, ...data.prices }; store(PKEY, prices); renderPrices(); }
+    P = projects[projects.length - 1]; persist(); renderAll();
+    toast(`Restored: ${added} new project${added === 1 ? "" : "s"}, ${updated} updated.`);
+  } catch (err) {
+    toast("That file isn't a Ramani Desk backup. Choose a file named ramani-backup-….json.");
+  }
+});
+
+/* ---------- Offline app ---------- */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+renderPrices();
+renderAll();
+renderBackup();
+</script>
+</body>
+</html>
