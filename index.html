@@ -104,6 +104,10 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .plan svg .lbl { font-size: 24px; font-weight: 600; }
 .plan svg .dim { font-size: 20px; fill: var(--muted); font-family: var(--font-num); }
 .plan svg .sm { font-size: 16px; }
+.viewswitch { display: inline-flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; }
+.viewswitch button { border: 0; border-radius: 0; background: var(--surface); color: var(--accent); padding: 8px 16px; }
+.viewswitch button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.pane { display: grid; gap: 12px; }
 .three-wrap { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); touch-action: none; }
 .three-wrap canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .three-wrap canvas:active { cursor: grabbing; }
@@ -202,33 +206,38 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
 
     <div class="card">
-      <div class="top"><h2>Concept plan</h2><div class="stats" id="design-stats"></div></div>
-      <div class="plans" id="plans"></div>
-      <p class="hint">A first-draft block plan to start sketching from. Rooms in the same row share a depth, so a room can come out deeper than you typed. Adjust sizes in the room schedule below and the plan redraws.</p>
-    </div>
-
-    <div class="card">
-      <div class="top"><h2>3D model</h2>
-        <div class="top-actions">
-          <button type="button" class="primary" id="btn-3d">Show 3D model</button>
-          <button type="button" id="btn-3d-pic" hidden>Save picture</button>
+      <div class="top">
+        <h2>Design view</h2>
+        <div class="viewswitch" role="group" aria-label="Design view">
+          <button type="button" id="view-2d" aria-pressed="true">2D plan</button>
+          <button type="button" id="view-3d" aria-pressed="false">3D model</button>
         </div>
       </div>
-      <div class="three-wrap" id="three-wrap">
-        <div class="three-empty" id="three-empty">The 3D model of this design appears here, on its plot, with sun and shadow. Clients who struggle with 2D plans usually get it at a glance.</div>
+      <div class="stats" id="design-stats"></div>
+
+      <div id="pane-2d" class="pane">
+        <div class="plans" id="plans"></div>
+        <p class="hint">A first-draft block plan to start sketching from. Rooms in the same row share a depth, so a room can come out deeper than you typed. Adjust sizes in the room schedule below and the plan redraws.</p>
       </div>
-      <div class="three-tools" id="three-tools" hidden>
-        <label class="inline" for="v-roof"><input type="checkbox" id="v-roof" checked>Show roof</label>
-        <label for="v-floors">Floors shown<select id="v-floors"></select></label>
-        <label for="v-hour">Time of day <span id="v-hour-out">9:00</span><input type="range" id="v-hour" min="6" max="18" step="0.25" value="9"></label>
-        <label for="v-season">Season
-          <select id="v-season"><option value="0">March / September</option><option value="23.4">June</option><option value="-23.4">December</option></select>
-        </label>
-        <label for="v-front">Plot front faces
-          <select id="v-front"><option value="180">South</option><option value="0">North</option><option value="90">East</option><option value="270">West</option></select>
-        </label>
+
+      <div id="pane-3d" class="pane" hidden>
+        <div class="three-wrap" id="three-wrap">
+          <div class="three-empty" id="three-empty">Loading the 3D model…</div>
+        </div>
+        <div class="three-tools" id="three-tools" hidden>
+          <label class="inline" for="v-roof"><input type="checkbox" id="v-roof" checked>Show roof</label>
+          <label for="v-floors">Floors shown<select id="v-floors"></select></label>
+          <label for="v-hour">Time of day <span id="v-hour-out">9:00</span><input type="range" id="v-hour" min="6" max="18" step="0.25" value="9"></label>
+          <label for="v-season">Season
+            <select id="v-season"><option value="0">March / September</option><option value="23.4">June</option><option value="-23.4">December</option></select>
+          </label>
+          <label for="v-front">Plot front faces
+            <select id="v-front"><option value="180">South</option><option value="0">North</option><option value="90">East</option><option value="270">West</option></select>
+          </label>
+          <button type="button" id="btn-3d-pic">Save picture</button>
+        </div>
+        <p class="hint">Drag to turn the model, pinch or scroll to zoom. Turn the roof off to see the rooms inside. Walls are shown without door openings.</p>
       </div>
-      <p class="hint" id="three-hint" hidden>Drag to turn the model, pinch or scroll to zoom. Turn the roof off to see the rooms inside. Walls are shown without door openings.</p>
     </div>
 
     <div class="card">
@@ -358,7 +367,7 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.1. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 1.2. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
 
 <script>
@@ -1006,21 +1015,27 @@ function draw3D() {
   });
 }
 function schedule3D() { clearTimeout(V3.timer); V3.timer = setTimeout(build3D, 200); }
-$("btn-3d").addEventListener("click", async () => {
-  const b = $("btn-3d");
+async function show3D() {
   if (V3.on) { build3D(); return; }
-  b.textContent = "Loading 3D…"; b.disabled = true;
+  if (V3.loading) return;
+  V3.loading = true; $("three-empty").hidden = false; $("three-empty").textContent = "Loading the 3D model…";
   try {
     await load3DLib(); init3D();
-    V3.on = true; $("three-empty").hidden = true; $("three-tools").hidden = false; $("three-hint").hidden = false; $("btn-3d-pic").hidden = false;
-    $("v-front").value = String(P.front3d ?? 180);
-    b.textContent = "Rebuild 3D"; build3D();
+    V3.on = true; $("three-empty").hidden = true; $("three-tools").hidden = false;
+    build3D();
   } catch (e) {
-    b.textContent = "Show 3D model";
-    $("three-empty").textContent = "The 3D model couldn't load. Check your connection and try again; after the first time it works offline.";
+    $("three-empty").textContent = "The 3D model couldn't load. Check your connection and tap 3D model again; after the first time it works offline.";
   }
-  b.disabled = false;
-});
+  V3.loading = false;
+}
+function setView(v) {
+  $("view-2d").setAttribute("aria-pressed", v === "2d"); $("view-3d").setAttribute("aria-pressed", v === "3d");
+  $("pane-2d").hidden = v !== "2d"; $("pane-3d").hidden = v !== "3d";
+  try { localStorage.setItem("ramani-view-v1", v); } catch (e) {}
+  if (v === "3d") show3D();
+}
+$("view-2d").addEventListener("click", () => setView("2d"));
+$("view-3d").addEventListener("click", () => setView("3d"));
 $("v-roof").addEventListener("change", e => { V3.roof = e.target.checked; build3D(); });
 $("v-floors").addEventListener("change", e => { V3.floors = e.target.value; build3D(); });
 $("v-hour").addEventListener("input", e => {
@@ -1089,6 +1104,7 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 renderPrices();
 renderAll();
 renderBackup();
+try { if (localStorage.getItem("ramani-view-v1") === "3d") setView("3d"); } catch (e) {}
 </script>
 </body>
 </html>
