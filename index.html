@@ -98,6 +98,8 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .plan svg .room { fill: var(--surface); stroke: var(--ink); stroke-width: 4; }
 .plan svg .room.wet { fill: var(--wet); }
 .plan svg .cor { fill: var(--accent-soft); stroke: none; }
+.plan svg .spare { fill: url(#hatch); stroke: var(--muted); stroke-width: 2; stroke-dasharray: 8 6; }
+.plan svg .hatch { stroke: var(--line); stroke-width: 3; }
 .plan svg .outer { fill: none; stroke: var(--ink); stroke-width: 12; }
 .plan svg .dl { stroke: var(--muted); stroke-width: 2; }
 .plan svg text { fill: var(--ink); text-anchor: middle; font-family: var(--font-body); }
@@ -108,6 +110,7 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .viewswitch button { border: 0; border-radius: 0; background: var(--surface); color: var(--accent); padding: 8px 16px; }
 .viewswitch button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
 .pane { display: grid; gap: 12px; }
+.view-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .three-wrap { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); touch-action: none; }
 .three-wrap canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .three-wrap canvas:active { cursor: grabbing; }
@@ -214,10 +217,14 @@ details summary { cursor: pointer; font-weight: 600; }
         </div>
       </div>
       <div class="stats" id="design-stats"></div>
+      <div class="view-opts">
+        <label class="inline" for="opt-dims"><input type="checkbox" id="opt-dims" checked>Show measurements</label>
+        <label class="inline" for="opt-names"><input type="checkbox" id="opt-names" checked>Show room names</label>
+      </div>
 
       <div id="pane-2d" class="pane">
         <div class="plans" id="plans"></div>
-        <p class="hint">A first-draft block plan to start sketching from. Rooms in the same row share a depth, so a room can come out deeper than you typed. Adjust sizes in the room schedule below and the plan redraws.</p>
+        <p class="hint">A first-draft block plan to start sketching from. Rooms are drawn at exactly the sizes in the room schedule. Hatched areas are leftover space: make a room bigger to use it, or keep it as passage or storage.</p>
       </div>
 
       <div id="pane-3d" class="pane" hidden>
@@ -367,7 +374,7 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.2. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 1.3. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
 
 <script>
@@ -489,13 +496,23 @@ function layout(p) {
     const W = Math.max(rowW(A), rowW(B));
     const dA = rowD(A), dB = rowD(B);
     const cor = (A.length && B.length) ? 1.2 : 0;
-    const rects = [];
-    const place = (row, y, d) => {
-      let x = 0; const tw = rowW(row);
-      row.forEach((r, i) => { const w = (+r.w || 0) + (i === row.length - 1 ? W - tw : 0); rects.push({ r, x, y, w, d }); x += +r.w || 0; });
+    const rects = [], fill = [], D = dA + cor + dB;
+    const addFill = (x, y, w, d) => { if (w > 0.05 && d > 0.05) fill.push({ x, y, w, d }); };
+    // Rooms keep exactly the size typed in. Front row sits on the front wall, back row on the back wall;
+    // whatever is left over is shown as spare space instead of stretching a room.
+    const place = (row, top, depth, atFront) => {
+      let x = 0;
+      row.forEach(r => {
+        const w = +r.w || 0, d = Math.min(+r.d || 0, depth);
+        const y = atFront ? top : top + depth - d;
+        rects.push({ r, x, y, w, d });
+        addFill(x, atFront ? top + d : top, w, depth - d);
+        x += w;
+      });
+      addFill(x, top, W - x, depth);
     };
-    place(A, 0, dA); place(B, dA + cor, dB);
-    out.push({ f, W, D: dA + cor + dB, rects, cor: cor ? { y: dA, h: cor } : null });
+    place(A, 0, dA, true); place(B, dA + cor, dB, false);
+    out.push({ f, W, D, rects, fill, cor: cor ? { y: dA, h: cor } : null });
   }
   return out;
 }
@@ -505,18 +522,30 @@ function planSVG(fl) {
   if (!fl.W || !fl.D) return '<p class="hint">No rooms on this floor yet.</p>';
   const S = 100, pad = 70, W = fl.W * S, D = fl.D * S;
   let s = `<svg viewBox="${-pad} ${-pad} ${W + pad + 20} ${D + pad + 20}" role="img" aria-label="${floorName(fl.f)} concept plan">`;
-  if (fl.cor) s += `<rect class="cor" x="0" y="${fl.cor.y * S}" width="${W}" height="${fl.cor.h * S}"/><text class="dim sm" x="${W / 2}" y="${(fl.cor.y + fl.cor.h / 2) * S + 6}">Corridor 1.2 m</text>`;
+  const showDims = VIEW.dims, showNames = VIEW.names;
+  s += `<defs><pattern id="hatch" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="16" class="hatch"/></pattern></defs>`;
+  if (fl.cor) {
+    s += `<rect class="cor" x="0" y="${fl.cor.y * S}" width="${W}" height="${fl.cor.h * S}"/>`;
+    if (showNames || showDims) s += `<text class="dim sm" x="${W / 2}" y="${(fl.cor.y + fl.cor.h / 2) * S + 6}">${showNames ? "Corridor" : ""}${showNames && showDims ? " " : ""}${showDims ? "1.2 m" : ""}</text>`;
+  }
+  (fl.fill || []).forEach(x => {
+    s += `<rect class="spare" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
+    if (x.w >= 1 && x.d >= 0.6 && (showNames || showDims)) s += `<text class="dim sm" x="${(x.x + x.w / 2) * S}" y="${(x.y + x.d / 2) * S + 6}">${showNames ? "Spare" : ""}${showNames && showDims ? " " : ""}${showDims ? x.w.toFixed(1) + "×" + x.d.toFixed(1) : ""}</text>`;
+  });
   fl.rects.forEach(x => {
     const cx = (x.x + x.w / 2) * S, cy = (x.y + x.d / 2) * S, small = x.w < 2.6 || x.d < 2.4;
+    const both = showNames && showDims;
     s += `<rect class="room${TYPES[x.r.type].wet ? " wet" : ""}" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
-    s += `<text class="lbl${small ? " sm" : ""}" x="${cx}" y="${cy - (small ? 4 : 8)}">${esc(small ? x.r.name.replace("bedroom", "bed").replace("Bathroom", "Bath") : x.r.name)}</text>`;
-    s += `<text class="dim${small ? " sm" : ""}" x="${cx}" y="${cy + (small ? 16 : 22)}">${x.w.toFixed(1)}×${x.d.toFixed(1)}</text>`;
+    if (showNames) s += `<text class="lbl${small ? " sm" : ""}" x="${cx}" y="${both ? cy - (small ? 4 : 8) : cy + 8}">${esc(small ? x.r.name.replace("bedroom", "bed").replace("Bathroom", "Bath") : x.r.name)}</text>`;
+    if (showDims) s += `<text class="dim${small ? " sm" : ""}" x="${cx}" y="${both ? cy + (small ? 16 : 22) : cy + 7}">${x.w.toFixed(1)}×${x.d.toFixed(1)}</text>`;
   });
   s += `<rect class="outer" x="0" y="0" width="${W}" height="${D}"/>`;
-  s += `<line class="dl" x1="0" y1="-30" x2="${W}" y2="-30"/><line class="dl" x1="0" y1="-40" x2="0" y2="-20"/><line class="dl" x1="${W}" y1="-40" x2="${W}" y2="-20"/>`;
-  s += `<text class="dim" x="${W / 2}" y="-40">${fl.W.toFixed(2)} m</text>`;
-  s += `<line class="dl" x1="-30" y1="0" x2="-30" y2="${D}"/><line class="dl" x1="-40" y1="0" x2="-20" y2="0"/><line class="dl" x1="-40" y1="${D}" x2="-20" y2="${D}"/>`;
-  s += `<text class="dim" transform="translate(-40 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
+  if (showDims) {
+    s += `<line class="dl" x1="0" y1="-30" x2="${W}" y2="-30"/><line class="dl" x1="0" y1="-40" x2="0" y2="-20"/><line class="dl" x1="${W}" y1="-40" x2="${W}" y2="-20"/>`;
+    s += `<text class="dim" x="${W / 2}" y="-40">${fl.W.toFixed(2)} m</text>`;
+    s += `<line class="dl" x1="-30" y1="0" x2="-30" y2="${D}"/><line class="dl" x1="-40" y1="0" x2="-20" y2="0"/><line class="dl" x1="-40" y1="${D}" x2="-20" y2="${D}"/>`;
+    s += `<text class="dim" transform="translate(-40 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
+  }
   return s + "</svg>";
 }
 
@@ -636,6 +665,9 @@ function fees(p, buildCost) {
   const owed = lines.filter(l => l.due && !F.paid[l.key] && l.amt > 0).reduce((t, l) => t + l.amt, 0);
   return { lines, owed, extra };
 }
+
+/* ---------- Display options (per device) ---------- */
+const VIEW = Object.assign({ dims: true, names: true }, load("ramani-viewopts-v1", {}));
 
 /* ---------- State ---------- */
 function defaultRules() { return { minHeight: 2.7, winPct: 10, bedMin: 7.5, minWidth: 2.4, coverage: 40, front: 5, side: 3, rear: 3, permFloors: 2, zone: "Residential", use: "Residential" }; }
@@ -820,7 +852,7 @@ const V3 = { on: false, loading: false, r: null, scene: null, cam: null, group: 
   theta: -0.7, phi: 1.0, dist: 30, roof: true, floors: "all", hour: 9, dec: 0, timer: null, frame: 0 };
 const LAT = -6.8; // Dar es Salaam
 const C3 = { wall: 0xf1ede4, slab: 0xb9bfc2, floor: 0xe4e0d6, wet: 0xbfdcd3, cor: 0xd6e6ec, glass: 0x5aa7c9, door: 0x6b4a2f,
-  grass: 0x93ad6f, plot: 0xb3c98c, roofStd: 0x7b8a93, roofMod: 0x3c474e, sky: 0xdfeaf0 };
+  grass: 0x93ad6f, spare: 0xd2d0c8, plot: 0xb3c98c, roofStd: 0x7b8a93, roofMod: 0x3c474e, sky: 0xdfeaf0 };
 
 function load3DLib() {
   return new Promise((res, rej) => {
@@ -870,16 +902,25 @@ function box(g, w, h, d, x, y, z, m, shadow = true) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
   mesh.position.set(x, y, z); mesh.castShadow = shadow; mesh.receiveShadow = true; g.add(mesh); return mesh;
 }
-function label3D(text) {
-  const c = document.createElement("canvas"); c.width = 512; c.height = 112;
+function label3D(lines, size = 1) {
+  lines = lines.filter(Boolean);
+  const lh = 54, hgt = lines.length * lh + 36;
+  const c = document.createElement("canvas"); c.width = 512; c.height = hgt;
   const x = c.getContext("2d");
-  x.font = "600 46px Archivo, system-ui, sans-serif";
-  const w = Math.min(500, x.measureText(text).width + 40);
-  x.fillStyle = "rgba(255,255,255,0.92)"; x.beginPath(); x.roundRect ? x.roundRect((512 - w) / 2, 18, w, 76, 14) : x.rect((512 - w) / 2, 18, w, 76); x.fill();
-  x.fillStyle = "#17232b"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 256, 58);
+  const fonts = ["600 46px Archivo, system-ui, sans-serif", "500 40px 'IBM Plex Mono', ui-monospace, monospace"];
+  let w = 0;
+  lines.forEach((l, i) => { x.font = fonts[i === 0 && lines.length > 1 ? 0 : (lines.length === 1 && /\d/.test(l) ? 1 : i ? 1 : 0)]; w = Math.max(w, x.measureText(l).width); });
+  w = Math.min(500, w + 40);
+  x.fillStyle = "rgba(255,255,255,0.92)"; x.beginPath(); x.roundRect ? x.roundRect((512 - w) / 2, 8, w, hgt - 16, 14) : x.rect((512 - w) / 2, 8, w, hgt - 16); x.fill();
+  x.textAlign = "center"; x.textBaseline = "middle";
+  lines.forEach((l, i) => {
+    const mono = lines.length > 1 ? i > 0 : /\d/.test(l);
+    x.font = fonts[mono ? 1 : 0]; x.fillStyle = mono ? "#3d4c55" : "#17232b";
+    x.fillText(l, 256, 18 + lh / 2 + i * lh);
+  });
   const t = new THREE.CanvasTexture(c);
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false }));
-  s.scale.set(3.8, 0.83, 1); s.renderOrder = 10; return s;
+  s.scale.set(3.8 * size, 3.8 * size * hgt / 512, 1); s.renderOrder = 10; return s;
 }
 function dispose(o) {
   o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
@@ -954,8 +995,19 @@ function build3D() {
         }
       }
       if (fl.f === 0 && x.r.type === "living" && x.y < eps) box(g, 1.0, 2.1, T + 0.06, wx(x.x + Math.min(1.2, x.w / 2)), yw + 1.05, wz(0), mDoor, false);
-      if (!showRoof) { const lb = label3D(x.r.name); lb.position.set(wx(x.x + x.w / 2), yw + 0.5, wz(x.y + x.d / 2)); g.add(lb); }
+      if (!showRoof && (VIEW.names || VIEW.dims)) {
+        const lb = label3D([VIEW.names && x.r.name, VIEW.dims && x.w.toFixed(1) + " × " + x.d.toFixed(1) + " m"]);
+        lb.position.set(wx(x.x + x.w / 2), yw + 0.6, wz(x.y + x.d / 2)); g.add(lb);
+      }
     });
+    (fl.fill || []).forEach(x => {
+      const sm = new THREE.Mesh(new THREE.PlaneGeometry(x.w, x.d), mat(C3.spare)); sm.rotation.x = -Math.PI / 2;
+      sm.position.set(wx(x.x + x.w / 2), yw + 0.011, wz(x.y + x.d / 2)); sm.receiveShadow = true; g.add(sm);
+    });
+    if (VIEW.dims && fl === shown[0]) {
+      const a = label3D([fl.W.toFixed(2) + " m"], 0.8); a.position.set(wx(fl.W / 2), 0.4, wz(-1.2)); g.add(a);
+      const b = label3D([fl.D.toFixed(2) + " m"], 0.8); b.position.set(wx(-1.4), 0.4, wz(fl.D / 2)); g.add(b);
+    }
   });
   if (showRoof) {
     const fl = L[L.length - 1], o = 0.6, pitch = 22 * Math.PI / 180;
@@ -1034,6 +1086,10 @@ function setView(v) {
   try { localStorage.setItem("ramani-view-v1", v); } catch (e) {}
   if (v === "3d") show3D();
 }
+$("opt-dims").checked = VIEW.dims; $("opt-names").checked = VIEW.names;
+["dims", "names"].forEach(k => $("opt-" + k).addEventListener("change", e => {
+  VIEW[k] = e.target.checked; store("ramani-viewopts-v1", VIEW); renderOutputs(); if (V3.on) build3D();
+}));
 $("view-2d").addEventListener("click", () => setView("2d"));
 $("view-3d").addEventListener("click", () => setView("3d"));
 $("v-roof").addEventListener("change", e => { V3.roof = e.target.checked; build3D(); });
