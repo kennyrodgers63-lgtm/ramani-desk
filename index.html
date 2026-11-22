@@ -104,6 +104,13 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .plan svg .lbl { font-size: 24px; font-weight: 600; }
 .plan svg .dim { font-size: 20px; fill: var(--muted); font-family: var(--font-num); }
 .plan svg .sm { font-size: 16px; }
+.three-wrap { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); touch-action: none; }
+.three-wrap canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.three-wrap canvas:active { cursor: grabbing; }
+.three-empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px; color: var(--muted); }
+.three-tools { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; }
+.three-tools label { min-width: 130px; }
+.three-tools input[type="range"] { padding: 0; accent-color: var(--accent); }
 .stats { display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .stat { display: flex; flex-direction: column; }
 .stat b { font-family: var(--font-num); font-size: 1.15rem; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -198,6 +205,30 @@ details summary { cursor: pointer; font-weight: 600; }
       <div class="top"><h2>Concept plan</h2><div class="stats" id="design-stats"></div></div>
       <div class="plans" id="plans"></div>
       <p class="hint">A first-draft block plan to start sketching from. Rooms in the same row share a depth, so a room can come out deeper than you typed. Adjust sizes in the room schedule below and the plan redraws.</p>
+    </div>
+
+    <div class="card">
+      <div class="top"><h2>3D model</h2>
+        <div class="top-actions">
+          <button type="button" class="primary" id="btn-3d">Show 3D model</button>
+          <button type="button" id="btn-3d-pic" hidden>Save picture</button>
+        </div>
+      </div>
+      <div class="three-wrap" id="three-wrap">
+        <div class="three-empty" id="three-empty">The 3D model of this design appears here, on its plot, with sun and shadow. Clients who struggle with 2D plans usually get it at a glance.</div>
+      </div>
+      <div class="three-tools" id="three-tools" hidden>
+        <label class="inline" for="v-roof"><input type="checkbox" id="v-roof" checked>Show roof</label>
+        <label for="v-floors">Floors shown<select id="v-floors"></select></label>
+        <label for="v-hour">Time of day <span id="v-hour-out">9:00</span><input type="range" id="v-hour" min="6" max="18" step="0.25" value="9"></label>
+        <label for="v-season">Season
+          <select id="v-season"><option value="0">March / September</option><option value="23.4">June</option><option value="-23.4">December</option></select>
+        </label>
+        <label for="v-front">Plot front faces
+          <select id="v-front"><option value="180">South</option><option value="0">North</option><option value="90">East</option><option value="270">West</option></select>
+        </label>
+      </div>
+      <p class="hint" id="three-hint" hidden>Drag to turn the model, pinch or scroll to zoom. Turn the roof off to see the rooms inside. Walls are shown without door openings.</p>
     </div>
 
     <div class="card">
@@ -327,7 +358,7 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.0. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 1.1. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
 
 <script>
@@ -699,6 +730,7 @@ function renderOutputs() {
       <td><input type="checkbox" id="pay-${l.key}" aria-label="${esc(l.label)} paid" data-bind="fees.paid.${l.key}"${P.fees.paid[l.key] ? " checked" : ""}></td></tr>`).join("") + "</tbody>";
   $("owed").textContent = tzs(Fz.owed);
   $("owed-note").textContent = Fz.owed > 0 ? "Collect this before moving to the next stage." : "Nothing outstanding right now.";
+  if (V3.on) schedule3D();
 }
 function renderAll() { renderProjectSelect(); fillBound(); renderRooms(); renderStages(); renderOutputs(); }
 
@@ -772,6 +804,239 @@ $("btn-copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(lastSummary); b.textContent = "Copied"; }
   catch (e) { const r = document.createRange(); r.selectNodeContents($("client-summary")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected"; }
   setTimeout(() => b.textContent = "Copy", 1500);
+});
+
+/* ---------- 3D model ---------- */
+const V3 = { on: false, loading: false, r: null, scene: null, cam: null, group: null, sun: null, target: null,
+  theta: -0.7, phi: 1.0, dist: 30, roof: true, floors: "all", hour: 9, dec: 0, timer: null, frame: 0 };
+const LAT = -6.8; // Dar es Salaam
+const C3 = { wall: 0xf1ede4, slab: 0xb9bfc2, floor: 0xe4e0d6, wet: 0xbfdcd3, cor: 0xd6e6ec, glass: 0x5aa7c9, door: 0x6b4a2f,
+  grass: 0x93ad6f, plot: 0xb3c98c, roofStd: 0x7b8a93, roofMod: 0x3c474e, sky: 0xdfeaf0 };
+
+function load3DLib() {
+  return new Promise((res, rej) => {
+    if (window.THREE) return res();
+    const s = document.createElement("script"); s.src = "vendor/three.min.js"; s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+}
+function init3D() {
+  const wrap = $("three-wrap");
+  const r = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
+  wrap.appendChild(r.domElement); V3.r = r;
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(C3.sky); V3.scene = scene;
+  V3.cam = new THREE.PerspectiveCamera(40, 1, 0.1, 600);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8f8470, 0.72));
+  const sun = new THREE.DirectionalLight(0xfff4e0, 0.95);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 200 });
+  sun.shadow.bias = -0.0005;
+  scene.add(sun); scene.add(sun.target); V3.sun = sun;
+  V3.target = new THREE.Vector3();
+  // drag to orbit, pinch or wheel to zoom
+  const el = r.domElement, pts = new Map(); let pinch = 0;
+  el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); });
+  el.addEventListener("pointermove", e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      V3.theta -= (e.clientX - p.x) * 0.008;
+      V3.phi = Math.min(1.5, Math.max(0.12, V3.phi - (e.clientY - p.y) * 0.008));
+    }
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) V3.dist = Math.min(150, Math.max(5, V3.dist * pinch / d));
+      pinch = d;
+    }
+    draw3D();
+  });
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = 0; };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", e => { e.preventDefault(); V3.dist = Math.min(150, Math.max(5, V3.dist * (1 + e.deltaY * 0.001))); draw3D(); }, { passive: false });
+  new ResizeObserver(() => { const w = wrap.clientWidth, h = wrap.clientHeight; r.setSize(w, h, false); V3.cam.aspect = w / h; V3.cam.updateProjectionMatrix(); draw3D(); }).observe(wrap);
+}
+function mat(color, extra) { return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: 0.9, metalness: 0 }, extra || {})); }
+function box(g, w, h, d, x, y, z, m, shadow = true) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+  mesh.position.set(x, y, z); mesh.castShadow = shadow; mesh.receiveShadow = true; g.add(mesh); return mesh;
+}
+function label3D(text) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 112;
+  const x = c.getContext("2d");
+  x.font = "600 46px Archivo, system-ui, sans-serif";
+  const w = Math.min(500, x.measureText(text).width + 40);
+  x.fillStyle = "rgba(255,255,255,0.92)"; x.beginPath(); x.roundRect ? x.roundRect((512 - w) / 2, 18, w, 76, 14) : x.rect((512 - w) / 2, 18, w, 76); x.fill();
+  x.fillStyle = "#17232b"; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(text, 256, 58);
+  const t = new THREE.CanvasTexture(c);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthTest: false }));
+  s.scale.set(3.8, 0.83, 1); s.renderOrder = 10; return s;
+}
+function dispose(o) {
+  o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
+}
+function build3D() {
+  if (!V3.r) return;
+  if (V3.group) { V3.scene.remove(V3.group); dispose(V3.group); }
+  const g = new THREE.Group(); V3.group = g; V3.scene.add(g);
+  $("v-front").value = String(P.front3d ?? 180);
+  const L = layout(P).filter(fl => fl.W && fl.D);
+  const H = +P.height || 3, SL = 0.2, T = 0.2, TI = 0.12;
+  const pw = +P.plotW || 20, pd = +P.plotD || 30;
+  // floors select
+  const fs = $("v-floors"), opts = ['<option value="all">All floors</option>'].concat(L.map(fl => `<option value="${fl.f}">Up to ${floorName(fl.f).toLowerCase()}</option>`));
+  if (fs.options.length !== opts.length) { fs.innerHTML = opts.join(""); fs.value = V3.floors in { all: 1 } || L.some(f => String(f.f) === V3.floors) ? V3.floors : "all"; }
+  // ground and plot
+  const grass = new THREE.Mesh(new THREE.PlaneGeometry(pw + 40, pd + 40), mat(C3.grass));
+  grass.rotation.x = -Math.PI / 2; grass.position.set(pw / 2, -0.02, pd / 2); grass.receiveShadow = true; g.add(grass);
+  const plot = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), mat(C3.plot));
+  plot.rotation.x = -Math.PI / 2; plot.position.set(pw / 2, 0, pd / 2); plot.receiveShadow = true; g.add(plot);
+  const edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(pw, 0.01, pd)), new THREE.LineBasicMaterial({ color: 0xffffff }));
+  edge.position.set(pw / 2, 0.02, pd / 2); g.add(edge);
+  if (!L.length) { frame3D(pw, 4, pd, pw / 2, pd / 2); return; }
+  const W0 = L[0].W, D0 = L[0].D;
+  const x0 = Math.max(0, (pw - W0) / 2), z0 = Math.max(0, pd - (+P.rules.front || 0) - D0);
+  const wx = px => x0 + px, wz = py => z0 + D0 - py; // plan y = 0 is the street side
+  const mWall = mat(C3.wall), mSlab = mat(C3.slab), mGlass = mat(C3.glass, { transparent: true, opacity: 0.6, roughness: 0.15, metalness: 0.1 }), mDoor = mat(C3.door);
+  const maxF = V3.floors === "all" ? Infinity : +V3.floors;
+  const shown = L.filter(fl => fl.f <= maxF);
+  const showRoof = V3.roof && shown.length && shown[shown.length - 1] === L[L.length - 1];
+  shown.forEach(fl => {
+    const yb = fl.f * (H + SL), yw = yb + SL;
+    box(g, fl.W, SL, fl.D, wx(fl.W / 2), yb + SL / 2, wz(fl.D / 2), mSlab);
+    if (fl.cor) {
+      const cm = new THREE.Mesh(new THREE.PlaneGeometry(fl.W, fl.cor.h), mat(C3.cor)); cm.rotation.x = -Math.PI / 2;
+      cm.position.set(wx(fl.W / 2), yw + 0.01, wz(fl.cor.y + fl.cor.h / 2)); cm.receiveShadow = true; g.add(cm);
+    }
+    // outer walls
+    box(g, fl.W + T, H, T, wx(fl.W / 2), yw + H / 2, wz(0), mWall);
+    box(g, fl.W + T, H, T, wx(fl.W / 2), yw + H / 2, wz(fl.D), mWall);
+    box(g, T, H, fl.D + T, wx(0), yw + H / 2, wz(fl.D / 2), mWall);
+    box(g, T, H, fl.D + T, wx(fl.W), yw + H / 2, wz(fl.D / 2), mWall);
+    const seen = new Set(), eps = 0.05;
+    fl.rects.forEach(x => {
+      // floor finish
+      const t = TYPES[x.r.type];
+      const fm = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(x.w - 0.02, 0.1), Math.max(x.d - 0.02, 0.1)), mat(t.wet ? C3.wet : C3.floor));
+      fm.rotation.x = -Math.PI / 2; fm.position.set(wx(x.x + x.w / 2), yw + 0.012, wz(x.y + x.d / 2)); fm.receiveShadow = true; g.add(fm);
+      // internal walls, each shared wall once
+      [[x.x, x.y, x.x + x.w, x.y], [x.x, x.y + x.d, x.x + x.w, x.y + x.d], [x.x, x.y, x.x, x.y + x.d], [x.x + x.w, x.y, x.x + x.w, x.y + x.d]].forEach(([ax, ay, bx, by]) => {
+        const horiz = Math.abs(ay - by) < eps;
+        if (horiz && (ay < eps || ay > fl.D - eps)) return;
+        if (!horiz && (ax < eps || ax > fl.W - eps)) return;
+        const key = [ax, ay, bx, by].map(v => v.toFixed(2)).join(","); if (seen.has(key)) return; seen.add(key);
+        const len = horiz ? bx - ax : by - ay;
+        if (horiz) box(g, len, H, TI, wx(ax + len / 2), yw + H / 2, wz(ay), mWall);
+        else box(g, TI, H, len, wx(ax), yw + H / 2, wz(ay + len / 2), mWall);
+      });
+      // window on the longest outside wall of the room
+      const area = x.w * x.d * (+x.r.win || 0) / 100;
+      if (area > 0.1) {
+        const sides = [];
+        if (x.y < eps) sides.push({ len: x.w, horiz: true, at: 0 });
+        if (x.y + x.d > fl.D - eps) sides.push({ len: x.w, horiz: true, at: fl.D });
+        if (x.x < eps) sides.push({ len: x.d, horiz: false, at: 0 });
+        if (x.x + x.w > fl.W - eps) sides.push({ len: x.d, horiz: false, at: fl.W });
+        const s = sides.sort((a, b) => b.len - a.len)[0];
+        if (s && s.len > 0.9) {
+          const wh = Math.min(1.2, H - 1.2), ww = Math.max(0.6, Math.min(s.len - 0.6, area / wh)), wy = yw + 0.9 + wh / 2;
+          if (s.horiz) box(g, ww, wh, T + 0.06, wx(x.x + x.w / 2), wy, wz(s.at), mGlass, false);
+          else box(g, T + 0.06, wh, ww, wx(s.at), wy, wz(x.y + x.d / 2), mGlass, false);
+        }
+      }
+      if (fl.f === 0 && x.r.type === "living" && x.y < eps) box(g, 1.0, 2.1, T + 0.06, wx(x.x + Math.min(1.2, x.w / 2)), yw + 1.05, wz(0), mDoor, false);
+      if (!showRoof) { const lb = label3D(x.r.name); lb.position.set(wx(x.x + x.w / 2), yw + 0.5, wz(x.y + x.d / 2)); g.add(lb); }
+    });
+  });
+  if (showRoof) {
+    const fl = L[L.length - 1], o = 0.6, pitch = 22 * Math.PI / 180;
+    const base = fl.f * (H + SL) + SL + H;
+    const along = fl.W >= fl.D, half = (along ? fl.D : fl.W) / 2 + o, rise = half * Math.tan(pitch);
+    const P3 = (px, h, py) => [wx(px), base + h, wz(py)];
+    const tri = [], gab = [];
+    const quad = (arr, a, b, c, d) => arr.push(...a, ...b, ...c, ...a, ...c, ...d);
+    const t3 = (arr, a, b, c) => arr.push(...a, ...b, ...c);
+    if (along) {
+      const A = P3(-o, 0, -o), B = P3(fl.W + o, 0, -o), C = P3(fl.W + o, 0, fl.D + o), D = P3(-o, 0, fl.D + o);
+      const R1 = P3(-o, rise, fl.D / 2), R2 = P3(fl.W + o, rise, fl.D / 2);
+      quad(tri, A, B, R2, R1); quad(tri, D, C, R2, R1);
+      const r0 = (fl.D / 2) * Math.tan(pitch);
+      t3(gab, P3(0, 0, 0), P3(0, 0, fl.D), P3(0, r0, fl.D / 2)); t3(gab, P3(fl.W, 0, 0), P3(fl.W, 0, fl.D), P3(fl.W, r0, fl.D / 2));
+    } else {
+      const A = P3(-o, 0, -o), B = P3(fl.W + o, 0, -o), C = P3(fl.W + o, 0, fl.D + o), D = P3(-o, 0, fl.D + o);
+      const R1 = P3(fl.W / 2, rise, -o), R2 = P3(fl.W / 2, rise, fl.D + o);
+      quad(tri, A, D, R2, R1); quad(tri, B, C, R2, R1);
+      const r0 = (fl.W / 2) * Math.tan(pitch);
+      t3(gab, P3(0, 0, 0), P3(fl.W, 0, 0), P3(fl.W / 2, r0, 0)); t3(gab, P3(0, 0, fl.D), P3(fl.W, 0, fl.D), P3(fl.W / 2, r0, fl.D));
+    }
+    const mk = (arr, m) => { const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3)); geo.computeVertexNormals();
+      const mesh = new THREE.Mesh(geo, m); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); };
+    mk(tri, mat(P.finish === "modern" ? C3.roofMod : C3.roofStd, { side: THREE.DoubleSide, roughness: 0.6, metalness: 0.2 }));
+    mk(gab, mat(C3.wall, { side: THREE.DoubleSide }));
+  }
+  const topH = L.length * (H + SL) + 2;
+  frame3D(W0, topH, D0, x0 + W0 / 2, z0 + D0 / 2);
+}
+function frame3D(w, h, d, cx, cz) {
+  const key = [w, h, d].map(v => v.toFixed(1)).join();
+  V3.target.set(cx, h * 0.3, cz);
+  if (V3.frameKey !== key) { V3.dist = Math.max(w, d, h) * 1.55 + 4; V3.frameKey = key; }
+  sun3D();
+}
+function sun3D() {
+  if (!V3.sun) return;
+  const fb = +(P.front3d ?? 180), rad = Math.PI / 180;
+  const dirOf = bearing => { const b = (bearing - (fb - 180)) * rad; return new THREE.Vector3(Math.sin(b), 0, -Math.cos(b)); };
+  const east = dirOf(90), north = dirOf(0);
+  const Hh = (V3.hour - 12) * 15 * rad, dec = V3.dec * rad, lat = LAT * rad;
+  const E = -Math.cos(dec) * Math.sin(Hh), N = Math.cos(lat) * Math.sin(dec) - Math.sin(lat) * Math.cos(dec) * Math.cos(Hh), U = Math.sin(lat) * Math.sin(dec) + Math.cos(lat) * Math.cos(dec) * Math.cos(Hh);
+  const dir = east.multiplyScalar(E).add(north.multiplyScalar(N)).add(new THREE.Vector3(0, Math.max(U, 0.03), 0)).normalize();
+  V3.sun.position.copy(V3.target).addScaledVector(dir, 80);
+  V3.sun.target.position.copy(V3.target);
+  V3.sun.intensity = U > 0 ? 0.3 + 0.45 * Math.min(1, U * 2) : 0.12;
+  draw3D();
+}
+function draw3D() {
+  if (!V3.r) return;
+  cancelAnimationFrame(V3.frame);
+  V3.frame = requestAnimationFrame(() => {
+    const c = V3.cam, s = Math.sin(V3.phi);
+    c.position.set(V3.target.x + V3.dist * s * Math.sin(V3.theta), V3.target.y + V3.dist * Math.cos(V3.phi), V3.target.z + V3.dist * s * Math.cos(V3.theta));
+    c.lookAt(V3.target); V3.r.render(V3.scene, c);
+  });
+}
+function schedule3D() { clearTimeout(V3.timer); V3.timer = setTimeout(build3D, 200); }
+$("btn-3d").addEventListener("click", async () => {
+  const b = $("btn-3d");
+  if (V3.on) { build3D(); return; }
+  b.textContent = "Loading 3D…"; b.disabled = true;
+  try {
+    await load3DLib(); init3D();
+    V3.on = true; $("three-empty").hidden = true; $("three-tools").hidden = false; $("three-hint").hidden = false; $("btn-3d-pic").hidden = false;
+    $("v-front").value = String(P.front3d ?? 180);
+    b.textContent = "Rebuild 3D"; build3D();
+  } catch (e) {
+    b.textContent = "Show 3D model";
+    $("three-empty").textContent = "The 3D model couldn't load. Check your connection and try again; after the first time it works offline.";
+  }
+  b.disabled = false;
+});
+$("v-roof").addEventListener("change", e => { V3.roof = e.target.checked; build3D(); });
+$("v-floors").addEventListener("change", e => { V3.floors = e.target.value; build3D(); });
+$("v-hour").addEventListener("input", e => {
+  V3.hour = +e.target.value; const h = Math.floor(V3.hour), m = Math.round((V3.hour - h) * 60);
+  $("v-hour-out").textContent = h + ":" + String(m).padStart(2, "0"); sun3D();
+});
+$("v-season").addEventListener("change", e => { V3.dec = +e.target.value; sun3D(); });
+$("v-front").addEventListener("change", e => { P.front3d = +e.target.value; persist(); sun3D(); });
+$("btn-3d-pic").addEventListener("click", () => {
+  if (!V3.r) return;
+  V3.r.render(V3.scene, V3.cam);
+  const a = document.createElement("a");
+  a.href = V3.r.domElement.toDataURL("image/png");
+  a.download = (P.name || "design").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + "-3d.png";
+  document.body.appendChild(a); a.click(); a.remove();
+  toast("Picture saved to your downloads.");
 });
 
 /* ---------- Backup and restore ---------- */
