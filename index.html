@@ -112,6 +112,22 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .pane { display: grid; gap: 12px; }
 .floor-step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 500; }
 .floor-step b { font-family: var(--font-num); font-size: 1.3rem; min-width: 2ch; text-align: center; }
+.mode-btn { margin-left: auto; }
+.tracer { display: grid; gap: 12px; }
+.trace-step { background: var(--accent-soft); border-radius: 8px; padding: 10px 14px; font-size: 0.92rem; }
+.trace-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.trace-tools .viewswitch button { padding: 8px 12px; font-size: 0.82rem; }
+.zoom { display: flex; gap: 4px; }
+.zoom button { padding: 8px 12px; }
+.trace-stage { overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 8px; background: #fff; -webkit-overflow-scrolling: touch; }
+.trace-stage canvas { display: block; touch-action: none; cursor: crosshair; }
+.trace-stage.pan canvas { touch-action: auto; cursor: grab; }
+.trace-form { display: grid; gap: 10px; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; }
+.trace-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.trace-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 3px 4px 3px 12px; font-size: 0.85rem; background: var(--bg); }
+.trace-chip span { font-family: var(--font-num); color: var(--muted); font-size: 0.78rem; }
+.trace-chip button { padding: 1px 8px; border-radius: 99px; font-size: 0.8rem; }
+.trace-end { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: end; justify-content: space-between; }
 .view-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .three-wrap { position: relative; width: 100%; height: clamp(320px, 60vw, 480px); border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); touch-action: none; }
 .three-wrap canvas { display: block; width: 100%; height: 100%; cursor: grab; }
@@ -210,6 +226,60 @@ details summary { cursor: pointer; font-weight: 600; }
       </div>
     </div>
 
+    <div class="card" id="trace-card">
+      <div class="top">
+        <h2>Or start from your own drawing</h2>
+        <div class="top-actions">
+          <button type="button" class="primary" id="btn-upload">Upload drawing</button>
+          <input type="file" id="trace-file" accept="image/*,application/pdf,.pdf,.dxf,.dwg" hidden>
+        </div>
+      </div>
+      <p class="hint">A photo of a sketch, or a plan exported from Archicad or SketchUp as an image or PDF. You set the scale, outline each room, and it becomes an editable 2D plan and 3D model.</p>
+
+      <div id="tracer" class="tracer" hidden>
+        <div class="trace-step" id="trace-step"></div>
+        <div class="trace-tools">
+          <div class="viewswitch" role="group" aria-label="Tracing tool">
+            <button type="button" id="tool-scale" aria-pressed="true">1. Set scale</button>
+            <button type="button" id="tool-draw" aria-pressed="false">2. Outline rooms</button>
+            <button type="button" id="tool-pan" aria-pressed="false">Move picture</button>
+          </div>
+          <div class="zoom">
+            <button type="button" id="tz-out" aria-label="Zoom out">−</button>
+            <button type="button" id="tz-fit">Fit</button>
+            <button type="button" id="tz-in" aria-label="Zoom in">+</button>
+          </div>
+          <label for="trace-page" id="trace-page-wrap" hidden>Page<select id="trace-page"></select></label>
+        </div>
+        <div class="trace-stage" id="trace-stage"><canvas id="trace-canvas"></canvas></div>
+
+        <form class="trace-form" id="form-scale" hidden>
+          <label for="scale-len">How long is the line you marked, in metres?
+            <input id="scale-len" type="number" step="0.01" min="0.1" inputmode="decimal" placeholder="e.g. 4.5">
+          </label>
+          <div class="top-actions"><button type="submit" class="primary">Use this scale</button><button type="button" id="scale-redo">Mark again</button></div>
+        </form>
+
+        <form class="trace-form" id="form-room" hidden>
+          <div class="grid">
+            <label for="tr-type">Room type<select id="tr-type"></select></label>
+            <label for="tr-name">Name<input id="tr-name"></label>
+          </div>
+          <div class="small muted" id="tr-size"></div>
+          <div class="top-actions"><button type="submit" class="primary">Save room</button><button type="button" id="tr-discard">Discard</button></div>
+        </form>
+
+        <div class="trace-list" id="trace-list"></div>
+        <div class="trace-end">
+          <label for="trace-floor">Put these rooms on<select id="trace-floor"></select></label>
+          <div class="top-actions">
+            <button type="button" class="primary" id="trace-done">Create 2D and 3D</button>
+            <button type="button" id="trace-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="top">
         <h2>Design view</h2>
@@ -225,6 +295,7 @@ details summary { cursor: pointer; font-weight: 600; }
         <b id="fl-count">1</b>
         <button type="button" id="fl-plus" aria-label="Add a floor">+</button>
         <span class="hint" id="fl-note"></span>
+        <button type="button" id="btn-mode" class="mode-btn"></button>
       </div>
       <div class="view-opts">
         <label class="inline" for="opt-dims"><input type="checkbox" id="opt-dims" checked>Show measurements</label>
@@ -384,7 +455,7 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.4. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 1.5. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
 
 <script>
@@ -501,6 +572,14 @@ function layout(p) {
     const below = out[out.length - 1];
     if (!rs.length && below && below.W && below.D) {
       out.push({ f, W: below.W, D: below.D, rects: [], fill: [{ x: 0, y: 0, w: below.W, d: below.D }], cor: null, empty: true });
+      continue;
+    }
+    if (p.manual) {
+      // Rooms sit exactly where they were drawn or placed.
+      const rects = rs.map(r => ({ r, x: +r.x || 0, y: +r.y || 0, w: +r.w || 0, d: +r.d || 0 }));
+      if (!rects.length) { out.push({ f, W: 0, D: 0, rects: [], fill: [], cor: null }); continue; }
+      const W = Math.max(...rects.map(x => x.x + x.w)), D = Math.max(...rects.map(x => x.y + x.d));
+      out.push({ f, W, D, rects, fill: [], cor: null });
       continue;
     }
     let A = rs.filter(r => TYPES[r.type].zone === "pub"), B = rs.filter(r => TYPES[r.type].zone === "priv");
@@ -736,12 +815,16 @@ function renderRooms() {
   af.value = String(keep); af.hidden = P.floors < 2;
   $("fl-count").textContent = P.floors; $("fl-minus").disabled = P.floors <= 1; $("fl-plus").disabled = P.floors >= 6;
   const floorOpts = f => Array.from({ length: P.floors }, (_, i) => `<option value="${i}"${i === f ? " selected" : ""}>${floorName(i)}</option>`).join("");
-  $("rooms-table").innerHTML = `<thead><tr><th>Room</th><th>Floor</th><th class="num">Width m</th><th class="num">Depth m</th><th class="num">Window %</th><th></th></tr></thead><tbody>` +
+  const M = !!P.manual;
+  $("btn-mode").textContent = M ? "Arrange automatically" : "Move rooms myself";
+  $("rooms-table").innerHTML = `<thead><tr><th>Room</th><th>Floor</th><th class="num">Width m</th><th class="num">Depth m</th>${M ? '<th class="num">From left m</th><th class="num">From front m</th>' : ""}<th class="num">Window %</th><th></th></tr></thead><tbody>` +
     P.rooms.map(r => `<tr>
       <td><input aria-label="Room name" id="rn-${r.id}" data-room="${r.id}" data-field="name" value="${esc(r.name)}"></td>
       <td><select aria-label="Floor" id="rf-${r.id}" data-room="${r.id}" data-field="floor">${floorOpts(r.floor)}</select></td>
       <td class="num"><input aria-label="Width" id="rw-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="w" value="${r.w}"></td>
-      <td class="num"><input aria-label="Depth" id="rd-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="d" value="${r.d}"></td>
+      <td class="num"><input aria-label="Depth" id="rd-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="d" value="${r.d}"></td>${M ? `
+      <td class="num"><input aria-label="Distance from left" id="rx-${r.id}" type="number" step="0.1" min="0" data-room="${r.id}" data-field="x" value="${+r.x || 0}"></td>
+      <td class="num"><input aria-label="Distance from front" id="ry-${r.id}" type="number" step="0.1" min="0" data-room="${r.id}" data-field="y" value="${+r.y || 0}"></td>` : ""}
       <td class="num"><input aria-label="Window percent" id="rp-${r.id}" type="number" step="1" min="0" data-room="${r.id}" data-field="win" value="${r.win}"></td>
       <td><button type="button" class="danger" data-del-room="${r.id}" aria-label="Remove ${esc(r.name)}">×</button></td></tr>`).join("") + "</tbody>";
 }
@@ -837,7 +920,7 @@ document.addEventListener("click", e => {
 $("btn-gen").addEventListener("click", () => {
   const o = parseBrief(P.brief || "");
   P.floors = o.floors; if (o.finish) P.finish = o.finish; if (o.plot) { P.plotW = o.plot[0]; P.plotD = o.plot[1]; }
-  P.rooms = generateRooms(o); persist(); fillBound(); renderRooms(); renderOutputs();
+  P.rooms = generateRooms(o); P.manual = false; persist(); fillBound(); renderRooms(); renderOutputs();
 });
 /* Adding a floor gives every floor a stairwell and shows the new floor as an open shell, ready for rooms. */
 function setFloors(n) {
@@ -862,7 +945,9 @@ const addSel = $("add-type");
 addSel.innerHTML = Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
 $("btn-add").addEventListener("click", () => {
   const type = addSel.value, n = P.rooms.filter(r => r.type === type).length + 1;
-  P.rooms.push(room(type, n > 1 && type !== "master" ? TYPES[type].label + " " + n : TYPES[type].label, Math.min(+$("add-floor").value || 0, P.floors - 1)));
+  const nr = room(type, n > 1 && type !== "master" ? TYPES[type].label + " " + n : TYPES[type].label, Math.min(+$("add-floor").value || 0, P.floors - 1));
+  if (P.manual) { const fl = layout(P)[nr.floor]; nr.x = fl && fl.W ? Math.round(fl.W * 10) / 10 : 0; nr.y = 0; }
+  P.rooms.push(nr);
   persist(); renderRooms(); renderOutputs();
 });
 $("rev-plus").addEventListener("click", () => { P.fees.revsUsed = (+P.fees.revsUsed || 0) + 1; persist(); renderOutputs(); });
@@ -891,6 +976,206 @@ $("btn-copy").addEventListener("click", async () => {
   try { await navigator.clipboard.writeText(lastSummary); b.textContent = "Copied"; }
   catch (e) { const r = document.createRange(); r.selectNodeContents($("client-summary")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = "Selected"; }
   setTimeout(() => b.textContent = "Copy", 1500);
+});
+
+/* ---------- Layout mode ---------- */
+// "Move rooms myself" freezes the automatic layout into positions she can edit.
+function freezeLayout() {
+  layout({ ...P, manual: false }).forEach(fl => fl.rects.forEach(x => { x.r.x = Math.round(x.x * 100) / 100; x.r.y = Math.round(x.y * 100) / 100; }));
+  P.manual = true;
+}
+$("btn-mode").addEventListener("click", () => {
+  if (P.manual) P.manual = false; else freezeLayout();
+  persist(); renderRooms(); renderOutputs();
+  toast(P.manual ? "Rooms stay where they are. Change “From left” and “From front” in the room schedule to move them." : "Rooms arranged automatically.");
+});
+
+/* ---------- Trace an uploaded drawing ---------- */
+const T = { src: null, zoom: 1, mode: "scale", pts: [], mpp: null, rooms: [], drag: null, pending: null, pdf: null };
+const tc = $("trace-canvas"), tctx = tc.getContext("2d");
+const scriptCache = {};
+function loadScript(src) {
+  return scriptCache[src] || (scriptCache[src] = new Promise((res, rej) => {
+    const el = document.createElement("script"); el.src = src; el.onload = res;
+    el.onerror = () => { delete scriptCache[src]; rej(new Error("load")); }; document.head.appendChild(el);
+  }));
+}
+async function imageFromFile(f) {
+  const url = URL.createObjectURL(f), img = new Image();
+  await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+  const k = Math.min(1, 2400 / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); return c;
+}
+async function pdfPage(n) {
+  const page = await T.pdf.getPage(n);
+  const v1 = page.getViewport({ scale: 1 }), k = Math.min(4, 2400 / Math.max(v1.width, v1.height)), vp = page.getViewport({ scale: k });
+  const c = document.createElement("canvas"); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const cx = c.getContext("2d"); cx.fillStyle = "#fff"; cx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: cx, viewport: vp }).promise; return c;
+}
+$("btn-upload").addEventListener("click", () => $("trace-file").click());
+$("trace-file").addEventListener("change", async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (/\.(dxf|dwg)$/i.test(f.name)) { toast("CAD files are coming in a later update. For now, export the plan from Archicad as a PDF or image and upload that."); return; }
+  const b = $("btn-upload"); b.disabled = true; b.textContent = "Opening…";
+  try {
+    if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
+      await loadScript("vendor/pdf.min.js");
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
+      T.pdf = await window.pdfjsLib.getDocument({ data: await f.arrayBuffer() }).promise;
+      $("trace-page").innerHTML = Array.from({ length: T.pdf.numPages }, (_, i) => `<option value="${i + 1}">${i + 1} of ${T.pdf.numPages}</option>`).join("");
+      $("trace-page-wrap").hidden = T.pdf.numPages < 2;
+      T.src = await pdfPage(1);
+    } else {
+      T.pdf = null; $("trace-page-wrap").hidden = true; T.src = await imageFromFile(f);
+    }
+    startTrace();
+  } catch (err) {
+    toast("Couldn't open that file. Try a JPG, PNG or PDF.");
+  }
+  b.disabled = false; b.textContent = "Upload drawing";
+});
+$("trace-page").addEventListener("change", async e => { T.src = await pdfPage(+e.target.value); T.pts = []; T.rooms = []; T.mpp = null; setTool("scale"); fitTrace(); });
+function startTrace() {
+  T.pts = []; T.rooms = []; T.mpp = null; T.drag = null; T.pending = null;
+  $("tr-type").innerHTML = Object.entries(TYPES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("");
+  const opts = Array.from({ length: P.floors }, (_, i) => `<option value="${i}">${floorName(i)} (replaces its rooms)</option>`);
+  if (P.floors < 6) opts.push(`<option value="${P.floors}">New floor on top</option>`);
+  $("trace-floor").innerHTML = opts.join("");
+  $("tracer").hidden = false; setTool("scale"); fitTrace(); renderTraceList();
+  $("tracer").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function fitTrace() { const w = $("trace-stage").clientWidth - 2; T.zoom = Math.max(0.05, w / T.src.width); drawTrace(); }
+function setTool(m) {
+  if (m === "draw" && !T.mpp) { toast("Set the scale first: tap both ends of a wall you know the length of."); m = "scale"; }
+  T.mode = m;
+  ["scale", "draw", "pan"].forEach(k => $("tool-" + k).setAttribute("aria-pressed", k === m));
+  $("trace-stage").classList.toggle("pan", m === "pan");
+  $("form-scale").hidden = !(m === "scale" && T.pts.length === 2);
+  const steps = {
+    scale: T.mpp ? `Scale set: 1 m = ${(1 / T.mpp).toFixed(0)} pixels. Tap two points again to change it, or go to step 2.` : "Step 1: tap both ends of a wall or dimension line whose length you know.",
+    draw: "Step 2: drag a box over each room, from one corner to the opposite corner. Edges snap to rooms you've already drawn.",
+    pan: "Move the picture with your finger, then switch back to a step."
+  };
+  $("trace-step").textContent = steps[m];
+  drawTrace();
+}
+["scale", "draw", "pan"].forEach(k => $("tool-" + k).addEventListener("click", () => setTool(k)));
+$("tz-in").addEventListener("click", () => { T.zoom *= 1.3; drawTrace(); });
+$("tz-out").addEventListener("click", () => { T.zoom /= 1.3; drawTrace(); });
+$("tz-fit").addEventListener("click", fitTrace);
+const metres = px => T.mpp ? (px * T.mpp).toFixed(2) : "?";
+function drawTrace() {
+  if (!T.src) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), z = T.zoom;
+  tc.width = Math.round(T.src.width * z * dpr); tc.height = Math.round(T.src.height * z * dpr);
+  tc.style.width = Math.round(T.src.width * z) + "px"; tc.style.height = Math.round(T.src.height * z) + "px";
+  const c = tctx; c.setTransform(dpr * z, 0, 0, dpr * z, 0, 0);
+  c.drawImage(T.src, 0, 0);
+  const lw = 2 / z, fs = 13 / z;
+  const box = (r, fill, stroke, label) => {
+    c.fillStyle = fill; c.fillRect(r.x, r.y, r.w, r.h);
+    c.strokeStyle = stroke; c.lineWidth = lw * 1.5; c.strokeRect(r.x, r.y, r.w, r.h);
+    if (label) {
+      c.font = `600 ${fs}px Archivo, system-ui, sans-serif`; c.textAlign = "center"; c.textBaseline = "middle";
+      const lines = label.split("\n"); const tw = Math.max(...lines.map(l => c.measureText(l).width)) + 10 / z;
+      const cx = r.x + r.w / 2, cy = r.y + r.h / 2, th = lines.length * fs * 1.3 + 6 / z;
+      c.fillStyle = "rgba(255,255,255,0.9)"; c.fillRect(cx - tw / 2, cy - th / 2, tw, th);
+      c.fillStyle = "#0f3a4c"; lines.forEach((l, i) => c.fillText(l, cx, cy - th / 2 + 3 / z + fs * 1.3 * (i + 0.5)));
+    }
+  };
+  T.rooms.forEach(r => box(r, "rgba(15,92,120,0.18)", "#0f5c78", `${r.name}\n${metres(r.w)} × ${metres(r.h)} m`));
+  if (T.drag) { const r = norm(T.drag); box(r, "rgba(214,120,20,0.18)", "#c46a10", T.mpp ? `${metres(r.w)} × ${metres(r.h)} m` : ""); }
+  if (T.pending) box(T.pending, "rgba(214,120,20,0.25)", "#c46a10", "");
+  if (T.pts.length) {
+    c.strokeStyle = "#d62f2f"; c.fillStyle = "#d62f2f"; c.lineWidth = lw * 1.5;
+    if (T.pts.length === 2) { c.beginPath(); c.moveTo(T.pts[0].x, T.pts[0].y); c.lineTo(T.pts[1].x, T.pts[1].y); c.stroke(); }
+    T.pts.forEach(p => { c.beginPath(); c.arc(p.x, p.y, 5 / z, 0, Math.PI * 2); c.fill(); });
+  }
+}
+const norm = d => ({ x: Math.min(d.x0, d.x1), y: Math.min(d.y0, d.y1), w: Math.abs(d.x1 - d.x0), h: Math.abs(d.y1 - d.y0) });
+const toImg = e => { const r = tc.getBoundingClientRect(); return { x: (e.clientX - r.left) / T.zoom, y: (e.clientY - r.top) / T.zoom }; };
+function snap(p) {
+  const tol = 14 / T.zoom, xs = [], ys = [];
+  T.rooms.forEach(r => { xs.push(r.x, r.x + r.w); ys.push(r.y, r.y + r.h); });
+  const near = (v, arr) => arr.reduce((best, a) => Math.abs(a - v) < Math.abs(best - v) ? a : best, Infinity);
+  const nx = near(p.x, xs), ny = near(p.y, ys);
+  return { x: Math.abs(nx - p.x) < tol ? nx : p.x, y: Math.abs(ny - p.y) < tol ? ny : p.y };
+}
+tc.addEventListener("pointerdown", e => {
+  if (T.mode === "pan" || !T.src || !$("form-room").hidden) return;
+  e.preventDefault(); const p = toImg(e);
+  if (T.mode === "scale") {
+    if (T.pts.length >= 2) T.pts = [];
+    T.pts.push(p);
+    if (T.pts.length === 2) { $("form-scale").hidden = false; $("scale-len").value = ""; $("scale-len").focus(); }
+    drawTrace(); return;
+  }
+  tc.setPointerCapture(e.pointerId); const s = snap(p); T.drag = { x0: s.x, y0: s.y, x1: s.x, y1: s.y }; drawTrace();
+});
+tc.addEventListener("pointermove", e => { if (!T.drag) return; const s = snap(toImg(e)); T.drag.x1 = s.x; T.drag.y1 = s.y; drawTrace(); });
+const endDrag = () => {
+  if (!T.drag) return;
+  const r = norm(T.drag); T.drag = null;
+  if (r.w * T.zoom < 14 || r.h * T.zoom < 14) { drawTrace(); return; }
+  T.pending = r;
+  const type = $("tr-type").value || "bed";
+  $("tr-name").value = nextName(type);
+  $("tr-size").textContent = `${metres(r.w)} m wide × ${metres(r.h)} m deep`;
+  $("form-room").hidden = false; drawTrace();
+  $("form-room").scrollIntoView({ behavior: "smooth", block: "nearest" });
+};
+tc.addEventListener("pointerup", endDrag); tc.addEventListener("pointercancel", () => { T.drag = null; drawTrace(); });
+function nextName(type) {
+  const n = T.rooms.filter(r => r.type === type).length + 1;
+  return n > 1 && type !== "master" ? TYPES[type].label + " " + n : TYPES[type].label;
+}
+$("tr-type").addEventListener("change", e => { $("tr-name").value = nextName(e.target.value); });
+$("form-scale").addEventListener("submit", e => {
+  e.preventDefault();
+  const len = +$("scale-len").value, px = Math.hypot(T.pts[1].x - T.pts[0].x, T.pts[1].y - T.pts[0].y);
+  if (!(len > 0) || px < 5) { toast("Type the real length of the line in metres, e.g. 4.5"); return; }
+  T.mpp = len / px; T.pts = []; $("form-scale").hidden = true;
+  toast("Scale set. Now outline each room."); setTool("draw"); renderTraceList();
+});
+$("scale-redo").addEventListener("click", () => { T.pts = []; $("form-scale").hidden = true; drawTrace(); });
+$("form-room").addEventListener("submit", e => {
+  e.preventDefault(); if (!T.pending) return;
+  const type = $("tr-type").value;
+  T.rooms.push({ ...T.pending, type, name: $("tr-name").value.trim() || TYPES[type].label, id: newId() });
+  T.pending = null; $("form-room").hidden = true; renderTraceList(); drawTrace();
+});
+$("tr-discard").addEventListener("click", () => { T.pending = null; $("form-room").hidden = true; drawTrace(); });
+function renderTraceList() {
+  $("trace-list").innerHTML = T.rooms.length
+    ? T.rooms.map(r => `<span class="trace-chip">${esc(r.name)} <span>${metres(r.w)}×${metres(r.h)}</span><button type="button" class="danger" data-trace-del="${r.id}" aria-label="Remove ${esc(r.name)}">×</button></span>`).join("")
+    : '<span class="small muted">No rooms outlined yet.</span>';
+}
+$("trace-list").addEventListener("click", e => {
+  const b = e.target.closest("[data-trace-del]"); if (!b) return;
+  T.rooms = T.rooms.filter(r => r.id !== b.dataset.traceDel); renderTraceList(); drawTrace();
+});
+$("trace-cancel").addEventListener("click", () => { $("tracer").hidden = true; T.src = null; });
+$("trace-done").addEventListener("click", () => {
+  if (!T.mpp) { toast("Set the scale first."); return; }
+  if (!T.rooms.length) { toast("Outline at least one room first."); return; }
+  const f = +$("trace-floor").value;
+  const minx = Math.min(...T.rooms.map(r => r.x)), miny = Math.min(...T.rooms.map(r => r.y));
+  const rnd = v => Math.round(v * 20) / 20; // nearest 5 cm
+  if (!P.manual) freezeLayout();
+  if (f >= P.floors) P.floors = f + 1;
+  P.rooms = P.rooms.filter(r => r.floor !== f);
+  T.rooms.forEach(t => {
+    const r = room(t.type, t.name, f);
+    r.w = rnd(t.w * T.mpp); r.d = rnd(t.h * T.mpp); r.x = rnd((t.x - minx) * T.mpp); r.y = rnd((t.y - miny) * T.mpp);
+    P.rooms.push(r);
+  });
+  P.manual = true; P.example = false;
+  persist(); fillBound(); renderRooms(); renderOutputs(); renderProjectSelect();
+  $("tracer").hidden = true; T.src = null;
+  toast(`${T.rooms.length} room${T.rooms.length === 1 ? "" : "s"} added to the ${floorName(f).toLowerCase()}.`);
+  document.querySelector("#view-2d").closest(".card").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 
 /* ---------- 3D model ---------- */

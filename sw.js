@@ -1,6 +1,6 @@
 // Ramani Desk service worker: keeps the app working with no internet.
-const VERSION = "ramani-v1.4.0";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./vendor/three.min.js"];
+const VERSION = "ramani-v1.5.0";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./vendor/three.min.js", "./vendor/pdf.min.js", "./vendor/pdf.worker.min.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
