@@ -98,9 +98,15 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .plan svg .room { fill: var(--surface); stroke: var(--ink); stroke-width: 4; }
 .plan svg .room.wet { fill: var(--wet); }
 .plan svg .cor { fill: var(--accent-soft); stroke: none; }
-.plan svg .spare { fill: url(#hatch); stroke: var(--muted); stroke-width: 2; stroke-dasharray: 8 6; }
+.plan svg .spare { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 8 6; }
 .plan svg .hatch { stroke: var(--line); stroke-width: 3; }
 .plan svg .outer { fill: none; stroke: var(--ink); stroke-width: 12; }
+.plan svg .room { stroke: none; }
+.plan svg .wall { fill: var(--ink); stroke: none; }
+.plan svg .win { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.plan svg .winl { stroke: var(--accent); stroke-width: 3; }
+.plan svg .leaf { stroke: var(--ink); stroke-width: 4; }
+.plan svg .swing { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 6 5; }
 .plan svg .dl { stroke: var(--muted); stroke-width: 2; }
 .plan svg text { fill: var(--ink); text-anchor: middle; font-family: var(--font-body); }
 .plan svg .lbl { font-size: 24px; font-weight: 600; }
@@ -124,6 +130,12 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .trace-stage.pan canvas { touch-action: auto; cursor: grab; }
 .trace-form { display: grid; gap: 10px; border: 1px solid var(--accent); border-radius: 8px; padding: 12px; }
 .trace-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.op-btn { font-size: 0.78rem; padding: 5px 9px; font-weight: 500; }
+.op-btn[aria-expanded="true"] { background: var(--accent); color: var(--surface); }
+tr.sub > td { background: var(--bg); padding: 10px; }
+.sub-box { display: grid; gap: 10px; }
+table.mini td input[type="number"] { width: 70px; }
+tr.joined td:first-child input { border-left: 3px solid var(--accent); }
 .trace-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 3px 4px 3px 12px; font-size: 0.85rem; background: var(--bg); }
 .trace-chip span { font-family: var(--font-num); color: var(--muted); font-size: 0.78rem; }
 .trace-chip button { padding: 1px 8px; border-radius: 99px; font-size: 0.8rem; }
@@ -220,6 +232,9 @@ details summary { cursor: pointer; font-weight: 600; }
         <label for="f-finish">Finish
           <select id="f-finish" data-bind="finish"><option value="standard">Standard</option><option value="modern">Modern</option></select>
         </label>
+        <label for="f-roof">Roof
+          <select id="f-roof" data-bind="roofType"><option value="gable">Gable (iron sheets)</option><option value="hip">Hip (iron sheets)</option><option value="flat">Flat concrete with parapet</option></select>
+        </label>
         <label for="f-height">Room height (m)<input id="f-height" type="number" min="2" max="5" step="0.1" data-bind="height"></label>
         <label for="f-pw">Plot width (m)<input id="f-pw" type="number" min="1" step="0.5" data-bind="plotW"></label>
         <label for="f-pd">Plot depth (m)<input id="f-pd" type="number" min="1" step="0.5" data-bind="plotD"></label>
@@ -266,6 +281,7 @@ details summary { cursor: pointer; font-weight: 600; }
             <label for="tr-name">Name<input id="tr-name"></label>
           </div>
           <div class="small muted" id="tr-size"></div>
+          <label class="inline" for="tr-join"><input type="checkbox" id="tr-join">Part of the previous room (for an L-shaped room)</label>
           <div class="top-actions"><button type="submit" class="primary">Save room</button><button type="button" id="tr-discard">Discard</button></div>
         </form>
 
@@ -455,7 +471,7 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.5. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 1.6. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
 
 <script>
@@ -618,38 +634,189 @@ function layout(p) {
 }
 const floorName = f => f === 0 ? "Ground floor" : f === 1 ? "First floor" : f === 2 ? "Second floor" : "Floor " + (f + 1);
 
-function planSVG(fl) {
+/* ---------- Walls, doors and windows ----------
+   One wall engine feeds the 2D plan, the 3D model, the elevations, the DXF export and the quantities,
+   so they always agree. Each room either has its own list of openings (edited by hand) or gets them
+   placed automatically from its position. */
+const EPS = 0.02, TW_EXT = 0.2, TW_INT = 0.12, DOOR_H = 2.1;
+const SIDES = ["front", "back", "left", "right"];
+const SIDE_LABEL = { front: "Front", back: "Back", left: "Left", right: "Right" };
+const INWARD = { front: 1, back: -1, left: 1, right: -1 };
+const r05 = v => Math.round(v * 20) / 20;
+function edgeOf(x, side) {
+  if (side === "front") return { h: true, c: x.y, a: x.x, b: x.x + x.w };
+  if (side === "back") return { h: true, c: x.y + x.d, a: x.x, b: x.x + x.w };
+  if (side === "left") return { h: false, c: x.x, a: x.y, b: x.y + x.d };
+  return { h: false, c: x.x + x.w, a: x.y, b: x.y + x.d };
+}
+const onBbox = (fl, e) => e.h ? (e.c < EPS || e.c > fl.D - EPS) : (e.c < EPS || e.c > fl.W - EPS);
+// how many room edges on this line cover point m
+function coverCount(fl, h, c, m) {
+  let n = 0;
+  fl.rects.forEach(x => SIDES.forEach(s => { const e = edgeOf(x, s); if (e.h === h && Math.abs(e.c - c) < EPS && m > e.a - EPS && m < e.b + EPS) n++; }));
+  return n;
+}
+function isExteriorAt(fl, h, c, m, manual) { return onBbox(fl, { h, c }) || (manual && coverCount(fl, h, c, m) < 2); }
+const partners = (fl, x) => x.r.join ? fl.rects.filter(o => o !== x && o.r.join === x.r.join) : [];
+function sharedWithPartner(fl, x, side) {
+  const e = edgeOf(x, side);
+  return partners(fl, x).some(o => SIDES.some(s => { const f = edgeOf(o, s); return f.h === e.h && Math.abs(f.c - e.c) < EPS && Math.min(e.b, f.b) - Math.max(e.a, f.a) > 0.3; }));
+}
+// Fit a door near one end and a window in the rest of the same wall.
+function autoOpenings(fl, x, manual) {
+  const r = x.r, t = TYPES[r.type], out = [];
+  const sides = SIDES.filter(s => !sharedWithPartner(fl, x, s)).map(s => {
+    const e = edgeOf(x, s);
+    return { s, e, len: e.b - e.a, ext: isExteriorAt(fl, e.h, e.c, (e.a + e.b) / 2, manual) };
+  });
+  const ext = sides.filter(o => o.ext).sort((a, b) => b.len - a.len);
+  const inner = sides.filter(o => !o.ext);
+  const doors = [];
+  if (r.type === "living" && r.floor === 0) {
+    const f = ext.find(o => o.s === "front") || ext[0];
+    if (f && f.len >= 1.6) doors.push({ kind: "door", side: f.s, w: 1.2, main: true, len: f.len });
+  }
+  if (r.type !== "living" || !doors.length || inner.length) {
+    let side = null;
+    if (fl.cor) side = x.y + x.d / 2 < fl.cor.y ? "back" : "front";
+    else if (inner.length) {
+      const cx = fl.W / 2, cy = fl.D / 2, mx = x.x + x.w / 2, my = x.y + x.d / 2;
+      const score = s => s === "front" ? my - cy : s === "back" ? cy - my : s === "left" ? mx - cx : cx - mx;
+      side = inner.slice().sort((a, b) => score(b.s) - score(a.s))[0].s;
+    }
+    const sd = side && sides.find(o => o.s === side && !o.ext) || (!fl.cor && inner[0]) || null;
+    if (sd && !(r.type === "living" && doors.length && !inner.length)) {
+      const w = r.type === "stair" ? 1.0 : (t.wet && r.type !== "kitchen") ? 0.7 : 0.9;
+      if (sd.len >= w + 0.2) doors.push({ kind: "door", side: sd.s, w, len: sd.len });
+    }
+  }
+  doors.forEach(d => { d.pos = Math.min(0.5, (0.15 + d.w / 2) / d.len); out.push({ kind: "door", side: d.side, pos: +d.pos.toFixed(3), w: d.w, main: !!d.main }); });
+  const area = x.w * x.d * (+r.win || 0) / 100;
+  if (area > 0.05 && ext.length) {
+    const wet = t.wet && r.type !== "kitchen", hh = wet ? 0.6 : 1.2, sill = wet ? 1.5 : 0.9;
+    const s = ext[0], d = out.find(o => o.side === s.s);
+    let lo = 0.3, hi = s.len - 0.3;
+    if (d) { const dc = d.pos * s.len; if (dc < s.len / 2) lo = dc + d.w / 2 + 0.3; else hi = dc - d.w / 2 - 0.3; }
+    const room4 = hi - lo;
+    if (room4 >= 0.6) {
+      const w = Math.min(room4, Math.max(0.6, area / hh));
+      out.push({ kind: "window", side: s.s, pos: +(((lo + hi) / 2) / s.len).toFixed(3), w: r05(w), h: hh, sill });
+    }
+  }
+  return out;
+}
+function openingsOf(fl, x, manual) { return Array.isArray(x.r.openings) ? x.r.openings : autoOpenings(fl, x, manual); }
+function union(iv) {
+  iv = iv.map(v => [v[0], v[1]]).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  iv.forEach(v => { const l = out[out.length - 1]; if (l && v[0] <= l[1] + EPS) l[1] = Math.max(l[1], v[1]); else out.push(v); });
+  return out;
+}
+function subtract(iv, cuts) {
+  let res = iv;
+  cuts.forEach(([ca, cb]) => {
+    const n = [];
+    res.forEach(([a, b]) => {
+      if (cb <= a + EPS || ca >= b - EPS) { n.push([a, b]); return; }
+      if (ca > a + EPS) n.push([a, ca]);
+      if (cb < b - EPS) n.push([cb, b]);
+    });
+    res = n;
+  });
+  return res.filter(([a, b]) => b - a > EPS);
+}
+function wallsOf(fl, p) {
+  if (fl._walls) return fl._walls;
+  const manual = !!p.manual, lines = new Map();
+  const key = (h, c) => (h ? "h" : "v") + Math.round(c * 100);
+  const addSeg = (h, c, a, b) => { if (b - a <= EPS) return; const k = key(h, c); if (!lines.has(k)) lines.set(k, { h, c, iv: [], cut: [] }); lines.get(k).iv.push([a, b]); };
+  if (!manual && fl.W && fl.D) { addSeg(true, 0, 0, fl.W); addSeg(true, fl.D, 0, fl.W); addSeg(false, 0, 0, fl.D); addSeg(false, fl.W, 0, fl.D); }
+  fl.rects.forEach(x => SIDES.forEach(s => { const e = edgeOf(x, s); addSeg(e.h, e.c, e.a, e.b); }));
+  // no wall between two parts of the same (L-shaped) room
+  fl.rects.forEach(x => partners(fl, x).forEach(o => SIDES.forEach(s => {
+    const e = edgeOf(x, s);
+    SIDES.forEach(s2 => { const f = edgeOf(o, s2); if (f.h === e.h && Math.abs(f.c - e.c) < EPS) {
+      const a = Math.max(e.a, f.a), b = Math.min(e.b, f.b); if (b - a > EPS && lines.has(key(e.h, e.c))) lines.get(key(e.h, e.c)).cut.push([a, b]); } });
+  })));
+  const gaps = [];
+  fl.rects.forEach(x => openingsOf(fl, x, manual).forEach(o => {
+    const e = edgeOf(x, o.side), len = e.b - e.a; if (len <= 0.2) return;
+    const w = Math.min(+o.w || 0.9, len - 0.1), mid = e.a + Math.min(Math.max(+o.pos || 0.5, 0), 1) * len;
+    const a = Math.max(e.a + 0.05, mid - w / 2), b = Math.min(e.b - 0.05, a + w);
+    gaps.push({ h: e.h, c: e.c, a, b, o, x, side: o.side, kind: o.kind });
+  }));
+  const segs = [];
+  lines.forEach(L => {
+    let iv = subtract(union(L.iv), L.cut);
+    iv = subtract(iv, gaps.filter(g => g.h === L.h && Math.abs(g.c - L.c) < EPS).map(g => [g.a, g.b]));
+    iv.forEach(([a, b]) => {
+      const ext = isExteriorAt(fl, L.h, L.c, (a + b) / 2, manual);
+      segs.push({ h: L.h, c: L.c, a, b, ext, t: ext ? TW_EXT : TW_INT });
+    });
+  });
+  gaps.forEach(g => { g.ext = isExteriorAt(fl, g.h, g.c, (g.a + g.b) / 2, manual); g.t = g.ext ? TW_EXT : TW_INT; });
+  return fl._walls = { segs, gaps };
+}
+// Show a joined room's name once, on its biggest part.
+function labelPart(fl, x) { const ps = partners(fl, x); return !ps.length || ps.every(o => o.w * o.d < x.w * x.d || (o.w * o.d === x.w * x.d && o.r.id > x.r.id)); }
+function groupArea(fl, x) { return [x, ...partners(fl, x)].reduce((s, o) => s + o.w * o.d, 0); }
+
+function planSVG(fl, opt = {}) {
   if (!fl.W || !fl.D) return '<p class="hint">No rooms on this floor yet.</p>';
-  const S = 100, pad = 70, W = fl.W * S, D = fl.D * S;
-  let s = `<svg viewBox="${-pad} ${-pad} ${W + pad + 20} ${D + pad + 20}" role="img" aria-label="${floorName(fl.f)} concept plan">`;
-  const showDims = VIEW.dims, showNames = VIEW.names;
-  s += `<defs><pattern id="hatch" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="16" class="hatch"/></pattern></defs>`;
+  const S = 100, pad = 80, W = fl.W * S, D = fl.D * S;
+  const vb = [-pad, -pad, W + pad + 30, D + pad + 30];
+  const size = opt.scale ? ` width="${(vb[2] / S * 1000 / opt.scale).toFixed(1)}mm" height="${(vb[3] / S * 1000 / opt.scale).toFixed(1)}mm"` : "";
+  let s = `<svg viewBox="${vb.join(" ")}"${size} role="img" aria-label="${floorName(fl.f)} plan">`;
+  const showDims = opt.dims ?? VIEW.dims, showNames = opt.names ?? VIEW.names;
+  const hid = "h" + fl.f + (opt.scale ? "p" : "");
+  s += `<defs><pattern id="${hid}" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="16" class="hatch"/></pattern></defs>`;
+  if (fl.empty) {
+    s += `<rect class="spare" style="fill:url(#${hid})" x="0" y="0" width="${W}" height="${D}"/><text class="lbl" x="${W / 2}" y="${D / 2}">Open floor</text><text class="dim sm" x="${W / 2}" y="${D / 2 + 30}">Add rooms to this floor in the room schedule</text>`;
+    s += `<rect class="outer" x="0" y="0" width="${W}" height="${D}"/>`;
+    return s + "</svg>";
+  }
   if (fl.cor) {
     s += `<rect class="cor" x="0" y="${fl.cor.y * S}" width="${W}" height="${fl.cor.h * S}"/>`;
     if (showNames || showDims) s += `<text class="dim sm" x="${W / 2}" y="${(fl.cor.y + fl.cor.h / 2) * S + 6}">${showNames ? "Corridor" : ""}${showNames && showDims ? " " : ""}${showDims ? "1.2 m" : ""}</text>`;
   }
-  if (fl.empty) {
-    s += `<rect class="spare" x="0" y="0" width="${W}" height="${D}"/><text class="lbl" x="${W / 2}" y="${D / 2}">Open floor</text><text class="dim sm" x="${W / 2}" y="${D / 2 + 30}">Add rooms to this floor in the room schedule</text>`;
-    s += `<rect class="outer" x="0" y="0" width="${W}" height="${D}"/>`;
-    return s + "</svg>";
-  }
   (fl.fill || []).forEach(x => {
-    s += `<rect class="spare" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
+    s += `<rect class="spare" style="fill:url(#${hid})" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
     if (x.w >= 1 && x.d >= 0.6 && (showNames || showDims)) s += `<text class="dim sm" x="${(x.x + x.w / 2) * S}" y="${(x.y + x.d / 2) * S + 6}">${showNames ? "Spare" : ""}${showNames && showDims ? " " : ""}${showDims ? x.w.toFixed(1) + "×" + x.d.toFixed(1) : ""}</text>`;
   });
+  fl.rects.forEach(x => s += `<rect class="room${TYPES[x.r.type].wet ? " wet" : ""}" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`);
+  const Wl = wallsOf(fl, P);
+  Wl.segs.forEach(g => {
+    const a = (g.a - g.t / 2) * S, b = (g.b + g.t / 2) * S, c = g.c * S, t = g.t * S;
+    s += g.h ? `<rect class="wall" x="${a}" y="${c - t / 2}" width="${b - a}" height="${t}"/>` : `<rect class="wall" x="${c - t / 2}" y="${a}" width="${t}" height="${b - a}"/>`;
+  });
+  Wl.gaps.forEach(g => {
+    const a = g.a * S, b = g.b * S, c = g.c * S, t = g.t * S;
+    if (g.kind === "window") {
+      s += g.h
+        ? `<rect class="win" x="${a}" y="${c - t / 2}" width="${b - a}" height="${t}"/><line class="winl" x1="${a}" y1="${c}" x2="${b}" y2="${c}"/>`
+        : `<rect class="win" x="${c - t / 2}" y="${a}" width="${t}" height="${b - a}"/><line class="winl" x1="${c}" y1="${a}" x2="${c}" y2="${b}"/>`;
+    } else {
+      const n = INWARD[g.side], w = b - a;
+      if (g.h) {
+        const tipY = c + n * w;
+        s += `<line class="leaf" x1="${a}" y1="${c}" x2="${a}" y2="${tipY}"/><path class="swing" d="M${a} ${tipY} A${w} ${w} 0 0 ${n > 0 ? 0 : 1} ${b} ${c}"/>`;
+      } else {
+        const tipX = c + n * w;
+        s += `<line class="leaf" x1="${c}" y1="${a}" x2="${tipX}" y2="${a}"/><path class="swing" d="M${tipX} ${a} A${w} ${w} 0 0 ${n > 0 ? 1 : 0} ${c} ${b}"/>`;
+      }
+    }
+  });
   fl.rects.forEach(x => {
-    const cx = (x.x + x.w / 2) * S, cy = (x.y + x.d / 2) * S, small = x.w < 2.6 || x.d < 2.4;
-    const both = showNames && showDims;
-    s += `<rect class="room${TYPES[x.r.type].wet ? " wet" : ""}" x="${x.x * S}" y="${x.y * S}" width="${x.w * S}" height="${x.d * S}"/>`;
+    if (!labelPart(fl, x)) { if (showDims) s += `<text class="dim sm" x="${(x.x + x.w / 2) * S}" y="${(x.y + x.d / 2) * S + 6}">${x.w.toFixed(1)}×${x.d.toFixed(1)}</text>`; return; }
+    const cx = (x.x + x.w / 2) * S, cy = (x.y + x.d / 2) * S, small = x.w < 2.6 || x.d < 2.4, both = showNames && showDims;
     if (showNames) s += `<text class="lbl${small ? " sm" : ""}" x="${cx}" y="${both ? cy - (small ? 4 : 8) : cy + 8}">${esc(small ? x.r.name.replace("bedroom", "bed").replace("Bathroom", "Bath") : x.r.name)}</text>`;
     if (showDims) s += `<text class="dim${small ? " sm" : ""}" x="${cx}" y="${both ? cy + (small ? 16 : 22) : cy + 7}">${x.w.toFixed(1)}×${x.d.toFixed(1)}</text>`;
   });
-  s += `<rect class="outer" x="0" y="0" width="${W}" height="${D}"/>`;
   if (showDims) {
-    s += `<line class="dl" x1="0" y1="-30" x2="${W}" y2="-30"/><line class="dl" x1="0" y1="-40" x2="0" y2="-20"/><line class="dl" x1="${W}" y1="-40" x2="${W}" y2="-20"/>`;
-    s += `<text class="dim" x="${W / 2}" y="-40">${fl.W.toFixed(2)} m</text>`;
-    s += `<line class="dl" x1="-30" y1="0" x2="-30" y2="${D}"/><line class="dl" x1="-40" y1="0" x2="-20" y2="0"/><line class="dl" x1="-40" y1="${D}" x2="-20" y2="${D}"/>`;
-    s += `<text class="dim" transform="translate(-40 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
+    s += `<line class="dl" x1="0" y1="-45" x2="${W}" y2="-45"/><line class="dl" x1="0" y1="-55" x2="0" y2="-35"/><line class="dl" x1="${W}" y1="-55" x2="${W}" y2="-35"/>`;
+    s += `<text class="dim" x="${W / 2}" y="-55">${fl.W.toFixed(2)} m</text>`;
+    s += `<line class="dl" x1="-45" y1="0" x2="-45" y2="${D}"/><line class="dl" x1="-55" y1="0" x2="-35" y2="0"/><line class="dl" x1="-55" y1="${D}" x2="-35" y2="${D}"/>`;
+    s += `<text class="dim" transform="translate(-55 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
   }
   return s + "</svg>";
 }
@@ -658,26 +825,30 @@ function planSVG(fl) {
 function quantities(p, L) {
   const H = +p.height || 3;
   const q = {};
-  let total = 0, ext = 0, intl = 0, win = 0, doors = 0, wetWall = 0, strip = 0, slabG = 0, slabS = 0, ring = 0, cols = 0, top = null, hasKitchen = false;
+  let total = 0, ext = 0, intl = 0, win = 0, doorA = 0, wetWall = 0, strip = 0, slabG = 0, slabS = 0, ring = 0, cols = 0, top = null, hasKitchen = false;
   L.forEach((fl, i) => {
     if (!fl.W || !fl.D) return;
-    const foot = fl.W * fl.D, per = 2 * (fl.W + fl.D);
-    const sumPer = fl.rects.reduce((s, x) => s + 2 * (x.w + x.d), 0) + (fl.cor ? 2 * (fl.W + fl.cor.h) : 0);
-    const internal = Math.max(0, (sumPer - per) / 2);
-    total += foot; ext += per; intl += internal;
+    const foot = fl.W * fl.D;
+    const Wl = wallsOf(fl, p);
+    let e = 0, n = 0;
+    Wl.segs.forEach(g => { if (g.ext) e += g.b - g.a; else n += g.b - g.a; });
+    Wl.gaps.forEach(g => { const l = g.b - g.a; if (g.ext) e += l; else n += l; if (g.kind === "window") win += l * (+g.o.h || 1.2); else doorA += l * DOOR_H; });
+    total += foot; ext += e; intl += n;
     fl.rects.forEach(x => {
-      win += x.w * x.d * (+x.r.win || 0) / 100; doors++;
       if (x.r.type === "bath" || x.r.type === "wc") wetWall += 2 * (x.w + x.d) * 2.1;
       if (x.r.type === "kitchen") hasKitchen = true;
     });
-    if (i === 0) { strip = (per + internal) * 0.6 * 0.25; slabG = foot * 0.1; q.hardcore = foot * 0.15 * 1.9; q.brc = foot / 10.5; }
+    if (i === 0) { strip = (e + n) * 0.6 * 0.25; slabG = foot * 0.1; q.hardcore = foot * 0.15 * 1.9; q.brc = foot / 10.5; }
     else slabS += foot * 0.15;
-    ring += per; cols += Math.ceil(per / 3.5);
+    ring += e; cols += Math.ceil(e / 3.5);
     top = fl;
   });
   if (!total) return { q: {}, total: 0, rows: [] };
   if (hasKitchen) wetWall += 3;
-  const gross = (ext + intl) * H, open = win + doors * 1.9, net = Math.max(gross - open, 0), ratio = gross ? net / gross : 0;
+  const roofType = p.roofType || "gable", foot = top.W * top.D;
+  if (roofType === "flat") { slabS += foot * 0.15; ext += 0; }
+  const parapet = roofType === "flat" ? 2 * (top.W + top.D) * 0.9 : 0;
+  const gross = (ext + intl) * H + parapet, open = win + doorA, net = Math.max(gross - open, 0), ratio = gross ? net / gross : 0;
   const extNet = ext * H * ratio, intNet = intl * H * ratio, plaster = 2 * intNet + 2 * extNet;
   const c124 = slabG + slabS * 1.1 + ring * 0.2 * 0.2 + cols * 0.2 * 0.2 * H;
   const mortarBags = net * 0.12 + plaster * 0.11 + total * 0.25;
@@ -690,19 +861,22 @@ function quantities(p, L) {
   q.y12 = slabKg * 0.7 / 10.66 + ring * 4 * 1.1 / 12 + cols * 4 * (H + 0.6) / 12;
   q.y10 = slabKg * 0.3 / 7.4;
   q.y8 = (ring / 0.2) * 0.8 / 12 + cols * (H / 0.2) * 0.8 / 12;
-  const roof = top.W * top.D * 1.3;
-  q[p.finish === "modern" ? "ibr5" : "ibr4"] = roof / 0.686 * 1.08;
-  q.ridge = Math.max(top.W, top.D) / 1.8;
-  q.nails = roof / 250;
-  q.t4x2 = roof * 0.6;
-  q.t2x2 = roof * 0.9;
+  const roof = roofType === "flat" ? foot : foot * (roofType === "hip" ? 1.35 : 1.3);
+  if (roofType !== "flat") {
+    q[p.finish === "modern" ? "ibr5" : "ibr4"] = roof / 0.686 * 1.08;
+    const ridgeLen = roofType === "hip" ? Math.abs(top.W - top.D) + 4 * Math.hypot(Math.min(top.W, top.D) / 2, Math.min(top.W, top.D) / 2) * 1.1 : Math.max(top.W, top.D) + 1.2;
+    q.ridge = ridgeLen / 1.8;
+    q.nails = roof / 250;
+    q.t4x2 = roof * (roofType === "hip" ? 0.7 : 0.6);
+    q.t2x2 = roof * 0.9;
+  }
   q[p.finish === "modern" ? "porcelain" : "ceramic"] = total * 1.08;
   q.walltile = wetWall * 1.1;
   q.adhesive = (total * 1.08 + wetWall * 1.1) / 5;
   q.emulsion = (intNet * 2 + extNet + total) / 40;
   q.weather = extNet / 40;
   q[p.finish === "modern" ? "winCase" : "winSlide"] = win;
-  return { q, total, win, net, roof };
+  return { q, total, win, net, roof, roofType };
 }
 const GROUPS = [
   ["Foundation and structure", ["hardcore", "cement", "rsand", "ballast", "brc", "y12", "y10", "y8"]],
@@ -733,13 +907,16 @@ function checks(p, L) {
   const add = (status, title, note) => out.push({ status, title, note });
   const g = L[0] || { W: 0, D: 0 };
   add(+p.height >= +R.minHeight ? "ok" : "fail", "Room height", `${(+p.height).toFixed(2)} m against a minimum of ${(+R.minHeight).toFixed(2)} m for ventilation.`);
-  const all = L.flatMap(fl => fl.rects);
-  const lowWin = all.filter(x => TYPES[x.r.type].hab && (+x.r.win || 0) < +R.winPct);
+  const all = L.flatMap(fl => fl.rects.map(x => Object.assign(x, { fl })));
+  const winOf = x => wallsOf(x.fl, p).gaps.filter(g => g.kind === "window" && (g.x === x || partners(x.fl, x).includes(g.x))).reduce((t, g) => t + (g.b - g.a) * (+g.o.h || 1.2), 0);
+  const lowWin = all.filter(x => TYPES[x.r.type].hab && labelPart(x.fl, x) && winOf(x) < groupArea(x.fl, x) * +R.winPct / 100);
+  const noDoor = all.filter(x => x.r.type !== "store" && labelPart(x.fl, x) && !wallsOf(x.fl, p).gaps.some(g => g.kind === "door" && (g.x === x || partners(x.fl, x).includes(g.x))));
   add(lowWin.length ? "fail" : "ok", "Windows for light and air",
     lowWin.length ? "Too little window in: " + lowWin.map(x => x.r.name).join(", ") + `. Habitable rooms need at least ${R.winPct}% of floor area.` : `Every habitable room has at least ${R.winPct}% of its floor area as window.`);
-  const smallBeds = all.filter(x => TYPES[x.r.type].bed && x.w * x.d < +R.bedMin);
+  add(noDoor.length ? "fail" : "ok", "Doors", noDoor.length ? "No door into: " + noDoor.map(x => x.r.name).join(", ") + ". Add one under the room's doors and windows." : "Every room has a door.");
+  const smallBeds = all.filter(x => TYPES[x.r.type].bed && labelPart(x.fl, x) && groupArea(x.fl, x) < +R.bedMin);
   const narrow = all.filter(x => TYPES[x.r.type].hab && Math.min(x.w, x.d) < +R.minWidth);
-  const sizeIssues = [...smallBeds.map(x => `${x.r.name} is ${(x.w * x.d).toFixed(1)} m²`), ...narrow.map(x => `${x.r.name} is ${Math.min(x.w, x.d).toFixed(1)} m wide`)];
+  const sizeIssues = [...smallBeds.map(x => `${x.r.name} is ${groupArea(x.fl, x).toFixed(1)} m²`), ...narrow.map(x => `${x.r.name} is ${Math.min(x.w, x.d).toFixed(1)} m wide`)];
   add(sizeIssues.length ? "fail" : "ok", "Room sizes", sizeIssues.length ? sizeIssues.join("; ") + "." : `Bedrooms are at least ${R.bedMin} m² and habitable rooms at least ${R.minWidth} m wide.`);
   const plotA = (+p.plotW || 0) * (+p.plotD || 0), cov = plotA ? g.W * g.D / plotA * 100 : 0;
   add(!plotA ? "check" : cov <= +R.coverage ? "ok" : "fail", "Plot coverage",
@@ -781,7 +958,7 @@ function makeProject(name, brief, example) {
   return {
     id: newId(), name, client: example ? "Example client" : "", region: "Dar es Salaam", example: !!example, brief,
     floors: o.floors, finish: o.finish || "standard", height: 3.0, plotW: o.plot ? o.plot[0] : 20, plotD: o.plot ? o.plot[1] : 30,
-    rooms: generateRooms(o), rules: defaultRules(), waste: { sewer: false, septic: false },
+    rooms: generateRooms(o), roofType: "gable", sheet: { architect: "" }, rules: defaultRules(), waste: { sewer: false, septic: false },
     cost: { labour: 30, services: 15, contingency: 10 },
     fees: { design: example ? 3000000 : 0, depositPct: 50, freeRevs: 2, revsUsed: example ? 1 : 0, revFee: example ? 300000 : 0,
       supMode: "visit", supRate: example ? 150000 : 0, supVisits: 0, supPct: 3, paid: { deposit: !!example, balance: false, revisions: false, supervision: false } },
@@ -790,6 +967,7 @@ function makeProject(name, brief, example) {
 }
 let projects = load(KEY, null);
 if (!Array.isArray(projects) || !projects.length) projects = [makeProject("Example: 3-bedroom house, Mbezi", "3 bedrooms, master ensuite, 1 floor, plot 20x30, standard finish, store", true)];
+projects.forEach(p => { p.roofType = p.roofType || "gable"; p.sheet = p.sheet || { architect: "" }; });
 let prices = { ...Object.fromEntries(Object.entries(PRICE_DEFAULTS).map(([k, v]) => [k, v.price])), ...load(PKEY, {}) };
 let currentId = load(CKEY, projects[0].id);
 let P = projects.find(p => p.id === currentId) || projects[0];
@@ -817,8 +995,8 @@ function renderRooms() {
   const floorOpts = f => Array.from({ length: P.floors }, (_, i) => `<option value="${i}"${i === f ? " selected" : ""}>${floorName(i)}</option>`).join("");
   const M = !!P.manual;
   $("btn-mode").textContent = M ? "Arrange automatically" : "Move rooms myself";
-  $("rooms-table").innerHTML = `<thead><tr><th>Room</th><th>Floor</th><th class="num">Width m</th><th class="num">Depth m</th>${M ? '<th class="num">From left m</th><th class="num">From front m</th>' : ""}<th class="num">Window %</th><th></th></tr></thead><tbody>` +
-    P.rooms.map(r => `<tr>
+  $("rooms-table").innerHTML = `<thead><tr><th>Room</th><th>Floor</th><th class="num">Width m</th><th class="num">Depth m</th>${M ? '<th class="num">From left m</th><th class="num">From front m</th>' : ""}<th class="num">Window %</th><th>Doors &amp; windows</th><th></th></tr></thead><tbody>` +
+    P.rooms.map(r => `<tr${r.join ? ' class="joined"' : ""}>
       <td><input aria-label="Room name" id="rn-${r.id}" data-room="${r.id}" data-field="name" value="${esc(r.name)}"></td>
       <td><select aria-label="Floor" id="rf-${r.id}" data-room="${r.id}" data-field="floor">${floorOpts(r.floor)}</select></td>
       <td class="num"><input aria-label="Width" id="rw-${r.id}" type="number" step="0.1" min="0.5" data-room="${r.id}" data-field="w" value="${r.w}"></td>
@@ -826,7 +1004,45 @@ function renderRooms() {
       <td class="num"><input aria-label="Distance from left" id="rx-${r.id}" type="number" step="0.1" min="0" data-room="${r.id}" data-field="x" value="${+r.x || 0}"></td>
       <td class="num"><input aria-label="Distance from front" id="ry-${r.id}" type="number" step="0.1" min="0" data-room="${r.id}" data-field="y" value="${+r.y || 0}"></td>` : ""}
       <td class="num"><input aria-label="Window percent" id="rp-${r.id}" type="number" step="1" min="0" data-room="${r.id}" data-field="win" value="${r.win}"></td>
-      <td><button type="button" class="danger" data-del-room="${r.id}" aria-label="Remove ${esc(r.name)}">×</button></td></tr>`).join("") + "</tbody>";
+      <td><button type="button" class="op-btn" data-op-toggle="${r.id}" aria-expanded="${openRoom === r.id}">${openingCount(r)}${r.join ? " · L" : ""}</button></td>
+      <td><button type="button" class="danger" data-del-room="${r.id}" aria-label="Remove ${esc(r.name)}">×</button></td></tr>${openRoom === r.id ? openingsRow(r, M ? 10 : 8) : ""}`).join("") + "</tbody>";
+}
+/* ---------- Doors and windows editor ---------- */
+let openRoom = null;
+function roomRect(r) { for (const fl of layout(P)) { const x = fl.rects.find(q => q.r === r); if (x) return { fl, x }; } return null; }
+function listOpenings(r) { if (Array.isArray(r.openings)) return r.openings; const rr = roomRect(r); return rr ? autoOpenings(rr.fl, rr.x, !!P.manual) : []; }
+function ensureOpenings(r) { if (!Array.isArray(r.openings)) r.openings = listOpenings(r).map(o => ({ ...o })); return r.openings; }
+function openingCount(r) {
+  const l = listOpenings(r), d = l.filter(o => o.kind === "door").length, w = l.length - d;
+  return `${d} door${d === 1 ? "" : "s"}, ${w} window${w === 1 ? "" : "s"}`;
+}
+function openingsRow(r, cols) {
+  const list = listOpenings(r), auto = !Array.isArray(r.openings);
+  const others = P.rooms.filter(o => o !== r && o.floor === r.floor);
+  const partner = r.join && others.find(o => o.join === r.join);
+  const inp = (i, f, v, step, min) => `<input id="op-${r.id}-${i}-${f}" type="number" step="${step}" min="${min}" data-op="${r.id}:${i}" data-of="${f}" value="${v}" aria-label="${f}">`;
+  const rows = list.map((o, i) => `<tr>
+    <td><select id="op-${r.id}-${i}-kind" data-op="${r.id}:${i}" data-of="kind" aria-label="Type"><option value="door"${o.kind === "door" ? " selected" : ""}>${o.main ? "Main door" : "Door"}</option><option value="window"${o.kind === "window" ? " selected" : ""}>Window</option></select></td>
+    <td><select id="op-${r.id}-${i}-side" data-op="${r.id}:${i}" data-of="side" aria-label="Wall">${SIDES.map(sd => `<option value="${sd}"${o.side === sd ? " selected" : ""}>${SIDE_LABEL[sd]}</option>`).join("")}</select></td>
+    <td class="num">${inp(i, "pos", Math.round((+o.pos || 0.5) * 100), 5, 0)}</td>
+    <td class="num">${inp(i, "w", o.w, 0.1, 0.4)}</td>
+    <td class="num">${o.kind === "window" ? inp(i, "h", o.h ?? 1.2, 0.1, 0.3) : '<span class="muted">2.10</span>'}</td>
+    <td class="num">${o.kind === "window" ? inp(i, "sill", o.sill ?? 0.9, 0.1, 0) : '<span class="muted">–</span>'}</td>
+    <td><button type="button" class="danger" data-op-del="${r.id}:${i}" aria-label="Remove">×</button></td></tr>`).join("");
+  return `<tr class="sub"><td colspan="${cols}"><div class="sub-box">
+    <div><b>Doors and windows for ${esc(r.name)}</b> <span class="small muted">${auto ? "Placed automatically. Change anything to set them yourself." : "Set by hand."}</span></div>
+    <div class="scroll"><table class="mini"><thead><tr><th>Type</th><th>Wall</th><th class="num">Along wall %</th><th class="num">Width m</th><th class="num">Height m</th><th class="num">Sill m</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="7" class="small muted">No doors or windows.</td></tr>'}</tbody></table></div>
+    <p class="hint">"Along wall" runs from the left end of the wall (front and back walls) or the front end (side walls), as seen on the plan.</p>
+    <div class="top-actions">
+      <button type="button" data-op-add="${r.id}:door">Add door</button>
+      <button type="button" data-op-add="${r.id}:window">Add window</button>
+      ${auto ? "" : `<button type="button" data-op-reset="${r.id}">Back to automatic</button>`}
+      <label for="join-${r.id}">L-shaped room: join with
+        <select id="join-${r.id}" data-join="${r.id}"><option value="">Not joined</option>${others.map(o => `<option value="${o.id}"${partner === o ? " selected" : ""}>${esc(o.name)}</option>`).join("")}</select>
+      </label>
+    </div>
+  </div></td></tr>`;
 }
 function renderPrices() {
   $("price-table").innerHTML = `<thead><tr><th>Material</th><th>Unit</th><th class="num">Price TZS</th></tr></thead><tbody>` +
@@ -900,6 +1116,21 @@ document.addEventListener("input", e => {
     const r = P.rooms.find(x => x.id === el.dataset.room); if (!r) return;
     const f = el.dataset.field;
     r[f] = f === "name" ? el.value : +el.value;
+  } else if (el.dataset.op) {
+    const [rid, i] = el.dataset.op.split(":"), r = P.rooms.find(x => x.id === rid); if (!r) return;
+    const wasAuto = !Array.isArray(r.openings), o = ensureOpenings(r)[+i]; if (!o) return;
+    const f = el.dataset.of, v = el.value;
+    if (f === "kind") { o.kind = v; if (v === "window") { o.h = o.h ?? 1.2; o.sill = o.sill ?? 0.9; delete o.main; } }
+    else if (f === "side") o.side = v;
+    else if (f === "pos") o.pos = Math.min(Math.max((+v || 0) / 100, 0), 1);
+    else o[f] = +v || 0;
+    if (wasAuto || f === "kind") { persist(); renderRooms(); renderOutputs(); return; }
+  } else if (el.dataset.join) {
+    const r = P.rooms.find(x => x.id === el.dataset.join); if (!r) return;
+    const old = r.join;
+    if (!el.value) { r.join = null; const rest = P.rooms.filter(x => old && x.join === old); if (rest.length === 1) rest[0].join = null; }
+    else { const o = P.rooms.find(x => x.id === el.value); const grp = o.join || r.join || newId(); if (old && old !== grp) P.rooms.forEach(x => { if (x.join === old) x.join = grp; }); r.join = o.join = grp; }
+    persist(); renderRooms(); renderOutputs(); return;
   } else if (el.dataset.price) {
     prices[el.dataset.price] = +el.value || 0; store(PKEY, prices);
   } else if (el.dataset.stage) {
@@ -913,6 +1144,17 @@ document.addEventListener("click", e => {
   if (t.dataset.tab) {
     document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", b === t ? "true" : "false"));
     ["design", "materials", "approval", "fees"].forEach(n => $("p-" + n).hidden = n !== t.dataset.tab);
+  } else if (t.dataset.opToggle) {
+    openRoom = openRoom === t.dataset.opToggle ? null : t.dataset.opToggle; renderRooms();
+  } else if (t.dataset.opAdd) {
+    const [rid, kind] = t.dataset.opAdd.split(":"), r = P.rooms.find(x => x.id === rid);
+    ensureOpenings(r).push(kind === "door" ? { kind: "door", side: "front", pos: 0.5, w: 0.9 } : { kind: "window", side: "front", pos: 0.5, w: 1.2, h: 1.2, sill: 0.9 });
+    persist(); renderRooms(); renderOutputs();
+  } else if (t.dataset.opDel) {
+    const [rid, i] = t.dataset.opDel.split(":"), r = P.rooms.find(x => x.id === rid);
+    ensureOpenings(r).splice(+i, 1); persist(); renderRooms(); renderOutputs();
+  } else if (t.dataset.opReset) {
+    const r = P.rooms.find(x => x.id === t.dataset.opReset); delete r.openings; persist(); renderRooms(); renderOutputs();
   } else if (t.dataset.delRoom) {
     P.rooms = P.rooms.filter(r => r.id !== t.dataset.delRoom); persist(); renderRooms(); renderOutputs();
   }
@@ -1142,8 +1384,11 @@ $("form-scale").addEventListener("submit", e => {
 $("scale-redo").addEventListener("click", () => { T.pts = []; $("form-scale").hidden = true; drawTrace(); });
 $("form-room").addEventListener("submit", e => {
   e.preventDefault(); if (!T.pending) return;
-  const type = $("tr-type").value;
-  T.rooms.push({ ...T.pending, type, name: $("tr-name").value.trim() || TYPES[type].label, id: newId() });
+  let type = $("tr-type").value, name = $("tr-name").value.trim() || TYPES[type].label, join = null;
+  const prev = T.rooms[T.rooms.length - 1];
+  if ($("tr-join").checked && prev) { join = prev.join = prev.join || prev.id; type = prev.type; name = prev.name; }
+  T.rooms.push({ ...T.pending, type, name, join, id: newId() });
+  $("tr-join").checked = false;
   T.pending = null; $("form-room").hidden = true; renderTraceList(); drawTrace();
 });
 $("tr-discard").addEventListener("click", () => { T.pending = null; $("form-room").hidden = true; drawTrace(); });
@@ -1169,6 +1414,7 @@ $("trace-done").addEventListener("click", () => {
   T.rooms.forEach(t => {
     const r = room(t.type, t.name, f);
     r.w = rnd(t.w * T.mpp); r.d = rnd(t.h * T.mpp); r.x = rnd((t.x - minx) * T.mpp); r.y = rnd((t.y - miny) * T.mpp);
+    if (t.join) r.join = "t" + t.join;
     P.rooms.push(r);
   });
   P.manual = true; P.example = false;
@@ -1256,6 +1502,69 @@ function label3D(lines, size = 1) {
 function dispose(o) {
   o.traverse(n => { if (n.geometry) n.geometry.dispose(); if (n.material) { if (n.material.map) n.material.map.dispose(); n.material.dispose(); } });
 }
+/* Roof geometry shared by the 3D model and the elevations: o = overhang (m), pitch in degrees */
+const ROOF = { o: 0.6, pitch: 22 };
+function roofDims(fl) {
+  const along = fl.W >= fl.D, half = (along ? fl.D : fl.W) / 2 + ROOF.o;
+  return { along, half, rise: half * Math.tan(ROOF.pitch * Math.PI / 180) };
+}
+function canvasTex(w, h, draw, rx = 1, ry = 1) {
+  const c = document.createElement("canvas"); c.width = w; c.height = h; draw(c.getContext("2d"), w, h);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); t.anisotropy = 4; return t;
+}
+function tileMat(color, w, d, tile) {
+  const col = "#" + new THREE.Color(color).getHexString();
+  const tex = canvasTex(64, 64, (c, W, H) => { c.fillStyle = col; c.fillRect(0, 0, W, H); c.strokeStyle = "rgba(0,0,0,0.16)"; c.lineWidth = 2; c.strokeRect(1, 1, W - 2, H - 2); }, w / tile, d / tile);
+  return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 });
+}
+function roofMat() {
+  const col = new THREE.Color(P.finish === "modern" ? C3.roofMod : C3.roofStd);
+  const hex = k => "#" + col.clone().multiplyScalar(k).getHexString();
+  const tex = canvasTex(32, 8, (c, W, H) => {
+    const g = c.createLinearGradient(0, 0, W, 0);
+    g.addColorStop(0, hex(0.72)); g.addColorStop(0.5, hex(1.12)); g.addColorStop(1, hex(0.72));
+    c.fillStyle = g; c.fillRect(0, 0, W, H);
+  });
+  return new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.25 });
+}
+function roof3D(g, fl, base, wx, wz, mWall) {
+  const type = P.roofType || "gable", o = ROOF.o, { along, half, rise } = roofDims(fl);
+  if (type === "flat") {
+    box(g, fl.W + 0.1, 0.15, fl.D + 0.1, wx(fl.W / 2), base + 0.075, wz(fl.D / 2), mat(C3.slab));
+    const ph = 0.9, t = 0.2;
+    box(g, fl.W + t, ph, t, wx(fl.W / 2), base + ph / 2, wz(0), mWall); box(g, fl.W + t, ph, t, wx(fl.W / 2), base + ph / 2, wz(fl.D), mWall);
+    box(g, t, ph, fl.D + t, wx(0), base + ph / 2, wz(fl.D / 2), mWall); box(g, t, ph, fl.D + t, wx(fl.W), base + ph / 2, wz(fl.D / 2), mWall);
+    return;
+  }
+  const P3 = (px, h, py) => [wx(px), base + h, wz(py)];
+  const pos = [], gab = [];
+  const quad = (arr, a, b, c, d) => arr.push(...a, ...b, ...c, ...a, ...c, ...d);
+  const tri = (arr, a, b, c) => arr.push(...a, ...b, ...c);
+  const A = P3(-o, 0, -o), B = P3(fl.W + o, 0, -o), C = P3(fl.W + o, 0, fl.D + o), D = P3(-o, 0, fl.D + o);
+  const r0 = (along ? fl.D : fl.W) / 2 * Math.tan(ROOF.pitch * Math.PI / 180);
+  if (type === "hip") {
+    if (along) { const R1 = P3(-o + half, rise, fl.D / 2), R2 = P3(fl.W + o - half, rise, fl.D / 2); quad(pos, A, B, R2, R1); quad(pos, D, C, R2, R1); tri(pos, A, R1, D); tri(pos, B, R2, C); }
+    else { const R1 = P3(fl.W / 2, rise, -o + half), R2 = P3(fl.W / 2, rise, fl.D + o - half); quad(pos, A, D, R2, R1); quad(pos, B, C, R2, R1); tri(pos, A, R1, B); tri(pos, D, R2, C); }
+  } else if (along) {
+    const R1 = P3(-o, rise, fl.D / 2), R2 = P3(fl.W + o, rise, fl.D / 2);
+    quad(pos, A, B, R2, R1); quad(pos, D, C, R2, R1);
+    tri(gab, P3(0, 0, 0), P3(0, 0, fl.D), P3(0, r0, fl.D / 2)); tri(gab, P3(fl.W, 0, 0), P3(fl.W, 0, fl.D), P3(fl.W, r0, fl.D / 2));
+  } else {
+    const R1 = P3(fl.W / 2, rise, -o), R2 = P3(fl.W / 2, rise, fl.D + o);
+    quad(pos, A, D, R2, R1); quad(pos, B, C, R2, R1);
+    tri(gab, P3(0, 0, 0), P3(fl.W, 0, 0), P3(fl.W / 2, r0, 0)); tri(gab, P3(0, 0, fl.D), P3(fl.W, 0, fl.D), P3(fl.W / 2, r0, fl.D));
+  }
+  // corrugations run down the slope
+  const uv = [];
+  for (let i = 0; i < pos.length; i += 3) { const x = pos[i], z = pos[i + 2]; uv.push((along ? x : z) / 0.19, (along ? z : x)); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, roofMat()); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh);
+  if (gab.length) {
+    const gg = new THREE.BufferGeometry(); gg.setAttribute("position", new THREE.Float32BufferAttribute(gab, 3)); gg.computeVertexNormals();
+    const gm = new THREE.Mesh(gg, mat(C3.wall, { side: THREE.DoubleSide })); gm.castShadow = true; g.add(gm);
+  }
+}
 function build3D() {
   if (!V3.r) return;
   if (V3.group) { V3.scene.remove(V3.group); dispose(V3.group); }
@@ -1278,7 +1587,7 @@ function build3D() {
   const W0 = L[0].W, D0 = L[0].D;
   const x0 = Math.max(0, (pw - W0) / 2), z0 = Math.max(0, pd - (+P.rules.front || 0) - D0);
   const wx = px => x0 + px, wz = py => z0 + D0 - py; // plan y = 0 is the street side
-  const mWall = mat(C3.wall), mSlab = mat(C3.slab), mGlass = mat(C3.glass, { transparent: true, opacity: 0.6, roughness: 0.15, metalness: 0.1 }), mDoor = mat(C3.door);
+  const mWall = mat(C3.wall), mSlab = mat(C3.slab), mGlass = mat(C3.glass, { transparent: true, opacity: 0.55, roughness: 0.1, metalness: 0.2 }), mDoor = mat(C3.door), mFrame = mat(0x9aa4a8, { metalness: 0.4, roughness: 0.4 });
   const maxF = V3.floors === "all" ? Infinity : +V3.floors;
   const shown = L.filter(fl => fl.f <= maxF);
   const showRoof = V3.roof && shown.length && shown[shown.length - 1] === L[L.length - 1];
@@ -1289,45 +1598,37 @@ function build3D() {
       const cm = new THREE.Mesh(new THREE.PlaneGeometry(fl.W, fl.cor.h), mat(C3.cor)); cm.rotation.x = -Math.PI / 2;
       cm.position.set(wx(fl.W / 2), yw + 0.01, wz(fl.cor.y + fl.cor.h / 2)); cm.receiveShadow = true; g.add(cm);
     }
-    // outer walls
-    box(g, fl.W + T, H, T, wx(fl.W / 2), yw + H / 2, wz(0), mWall);
-    box(g, fl.W + T, H, T, wx(fl.W / 2), yw + H / 2, wz(fl.D), mWall);
-    box(g, T, H, fl.D + T, wx(0), yw + H / 2, wz(fl.D / 2), mWall);
-    box(g, T, H, fl.D + T, wx(fl.W), yw + H / 2, wz(fl.D / 2), mWall);
-    const seen = new Set(), eps = 0.05;
+    const Wl = wallsOf(fl, P);
+    Wl.segs.forEach(sg => {
+      const len = sg.b - sg.a + sg.t, mid = (sg.a + sg.b) / 2;
+      if (sg.h) box(g, len, H, sg.t, wx(mid), yw + H / 2, wz(sg.c), mWall);
+      else box(g, sg.t, H, len, wx(sg.c), yw + H / 2, wz(mid), mWall);
+    });
+    Wl.gaps.forEach(gp => {
+      const len = gp.b - gp.a, mid = (gp.a + gp.b) / 2;
+      const piece = (y0, y1, m, thick = gp.t, shadow = true) => {
+        if (y1 - y0 <= 0.01) return;
+        if (gp.h) box(g, len, y1 - y0, thick, wx(mid), yw + (y0 + y1) / 2, wz(gp.c), m, shadow);
+        else box(g, thick, y1 - y0, len, wx(gp.c), yw + (y0 + y1) / 2, wz(mid), m, shadow);
+      };
+      if (gp.kind === "window") {
+        const sill = Math.min(+gp.o.sill || 0.9, H - 0.4), top = Math.min(sill + (+gp.o.h || 1.2), H - 0.15);
+        piece(0, sill, mWall); piece(top, H, mWall);
+        piece(sill, top, mGlass, 0.04, false);
+        piece(sill - 0.04, sill, mFrame, gp.t + 0.06, false);
+      } else {
+        const top = Math.min(DOOR_H, H - 0.1);
+        piece(top, H, mWall);
+        if (gp.o.main) piece(0, top, mDoor, 0.05, false);
+      }
+    });
     fl.rects.forEach(x => {
       // floor finish
       const t = TYPES[x.r.type];
-      const fm = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(x.w - 0.02, 0.1), Math.max(x.d - 0.02, 0.1)), mat(t.wet ? C3.wet : C3.floor));
+      const fm = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(x.w - 0.02, 0.1), Math.max(x.d - 0.02, 0.1)), tileMat(t.wet ? C3.wet : C3.floor, x.w, x.d, t.wet ? 0.3 : 0.6));
       fm.rotation.x = -Math.PI / 2; fm.position.set(wx(x.x + x.w / 2), yw + 0.012, wz(x.y + x.d / 2)); fm.receiveShadow = true; g.add(fm);
-      // internal walls, each shared wall once
-      [[x.x, x.y, x.x + x.w, x.y], [x.x, x.y + x.d, x.x + x.w, x.y + x.d], [x.x, x.y, x.x, x.y + x.d], [x.x + x.w, x.y, x.x + x.w, x.y + x.d]].forEach(([ax, ay, bx, by]) => {
-        const horiz = Math.abs(ay - by) < eps;
-        if (horiz && (ay < eps || ay > fl.D - eps)) return;
-        if (!horiz && (ax < eps || ax > fl.W - eps)) return;
-        const key = [ax, ay, bx, by].map(v => v.toFixed(2)).join(","); if (seen.has(key)) return; seen.add(key);
-        const len = horiz ? bx - ax : by - ay;
-        if (horiz) box(g, len, H, TI, wx(ax + len / 2), yw + H / 2, wz(ay), mWall);
-        else box(g, TI, H, len, wx(ax), yw + H / 2, wz(ay + len / 2), mWall);
-      });
-      // window on the longest outside wall of the room
-      const area = x.w * x.d * (+x.r.win || 0) / 100;
-      if (area > 0.1) {
-        const sides = [];
-        if (x.y < eps) sides.push({ len: x.w, horiz: true, at: 0 });
-        if (x.y + x.d > fl.D - eps) sides.push({ len: x.w, horiz: true, at: fl.D });
-        if (x.x < eps) sides.push({ len: x.d, horiz: false, at: 0 });
-        if (x.x + x.w > fl.W - eps) sides.push({ len: x.d, horiz: false, at: fl.W });
-        const s = sides.sort((a, b) => b.len - a.len)[0];
-        if (s && s.len > 0.9) {
-          const wh = Math.min(1.2, H - 1.2), ww = Math.max(0.6, Math.min(s.len - 0.6, area / wh)), wy = yw + 0.9 + wh / 2;
-          if (s.horiz) box(g, ww, wh, T + 0.06, wx(x.x + x.w / 2), wy, wz(s.at), mGlass, false);
-          else box(g, T + 0.06, wh, ww, wx(s.at), wy, wz(x.y + x.d / 2), mGlass, false);
-        }
-      }
-      if (fl.f === 0 && x.r.type === "living" && x.y < eps) box(g, 1.0, 2.1, T + 0.06, wx(x.x + Math.min(1.2, x.w / 2)), yw + 1.05, wz(0), mDoor, false);
       if (!showRoof && (VIEW.names || VIEW.dims)) {
-        const lb = label3D([VIEW.names && x.r.name, VIEW.dims && x.w.toFixed(1) + " × " + x.d.toFixed(1) + " m"]);
+        const lb = label3D([VIEW.names && labelPart(fl, x) && x.r.name, VIEW.dims && x.w.toFixed(1) + " × " + x.d.toFixed(1) + " m"]);
         lb.position.set(wx(x.x + x.w / 2), yw + 0.6, wz(x.y + x.d / 2)); g.add(lb);
       }
     });
@@ -1340,32 +1641,7 @@ function build3D() {
       const b = label3D([fl.D.toFixed(2) + " m"], 0.8); b.position.set(wx(-1.4), 0.4, wz(fl.D / 2)); g.add(b);
     }
   });
-  if (showRoof) {
-    const fl = L[L.length - 1], o = 0.6, pitch = 22 * Math.PI / 180;
-    const base = fl.f * (H + SL) + SL + H;
-    const along = fl.W >= fl.D, half = (along ? fl.D : fl.W) / 2 + o, rise = half * Math.tan(pitch);
-    const P3 = (px, h, py) => [wx(px), base + h, wz(py)];
-    const tri = [], gab = [];
-    const quad = (arr, a, b, c, d) => arr.push(...a, ...b, ...c, ...a, ...c, ...d);
-    const t3 = (arr, a, b, c) => arr.push(...a, ...b, ...c);
-    if (along) {
-      const A = P3(-o, 0, -o), B = P3(fl.W + o, 0, -o), C = P3(fl.W + o, 0, fl.D + o), D = P3(-o, 0, fl.D + o);
-      const R1 = P3(-o, rise, fl.D / 2), R2 = P3(fl.W + o, rise, fl.D / 2);
-      quad(tri, A, B, R2, R1); quad(tri, D, C, R2, R1);
-      const r0 = (fl.D / 2) * Math.tan(pitch);
-      t3(gab, P3(0, 0, 0), P3(0, 0, fl.D), P3(0, r0, fl.D / 2)); t3(gab, P3(fl.W, 0, 0), P3(fl.W, 0, fl.D), P3(fl.W, r0, fl.D / 2));
-    } else {
-      const A = P3(-o, 0, -o), B = P3(fl.W + o, 0, -o), C = P3(fl.W + o, 0, fl.D + o), D = P3(-o, 0, fl.D + o);
-      const R1 = P3(fl.W / 2, rise, -o), R2 = P3(fl.W / 2, rise, fl.D + o);
-      quad(tri, A, D, R2, R1); quad(tri, B, C, R2, R1);
-      const r0 = (fl.W / 2) * Math.tan(pitch);
-      t3(gab, P3(0, 0, 0), P3(fl.W, 0, 0), P3(fl.W / 2, r0, 0)); t3(gab, P3(0, 0, fl.D), P3(fl.W, 0, fl.D), P3(fl.W / 2, r0, fl.D));
-    }
-    const mk = (arr, m) => { const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(arr, 3)); geo.computeVertexNormals();
-      const mesh = new THREE.Mesh(geo, m); mesh.castShadow = true; mesh.receiveShadow = true; g.add(mesh); };
-    mk(tri, mat(P.finish === "modern" ? C3.roofMod : C3.roofStd, { side: THREE.DoubleSide, roughness: 0.6, metalness: 0.2 }));
-    mk(gab, mat(C3.wall, { side: THREE.DoubleSide }));
-  }
+  if (showRoof) roof3D(g, L[L.length - 1], L[L.length - 1].f * (H + SL) + SL + H, wx, wz, mWall);
   const topH = L.length * (H + SL) + 2;
   frame3D(W0, topH, D0, x0 + W0 / 2, z0 + D0 / 2);
 }
