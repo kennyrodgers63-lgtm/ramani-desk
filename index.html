@@ -112,8 +112,16 @@ tr.group td { font-weight: 600; background: var(--bg); color: var(--accent); fon
 .plan svg .lbl { font-size: 24px; font-weight: 600; }
 .plan svg .dim { font-size: 20px; fill: var(--muted); font-family: var(--font-num); }
 .plan svg .sm { font-size: 16px; }
+.plan svg .ewall { fill: var(--surface); stroke: var(--ink); stroke-width: 4; }
+.plan svg .eslab { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 10 6; }
+.plan svg .ewin { fill: var(--accent-soft); stroke: var(--ink); stroke-width: 3; }
+.plan svg .emull { stroke: var(--ink); stroke-width: 2; }
+.plan svg .edoor { fill: var(--line); stroke: var(--ink); stroke-width: 3; }
+.plan svg .eroof { fill: var(--line); stroke: var(--ink); stroke-width: 4; }
+.plan svg .eground { stroke: var(--ink); stroke-width: 8; }
+.plan svg .elev-l { text-anchor: start; }
 .viewswitch { display: inline-flex; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; }
-.viewswitch button { border: 0; border-radius: 0; background: var(--surface); color: var(--accent); padding: 8px 16px; }
+.viewswitch button { white-space: nowrap; border: 0; border-radius: 0; background: var(--surface); color: var(--accent); padding: 8px 16px; }
 .viewswitch button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
 .pane { display: grid; gap: 12px; }
 .floor-step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-weight: 500; }
@@ -136,6 +144,34 @@ tr.sub > td { background: var(--bg); padding: 10px; }
 .sub-box { display: grid; gap: 10px; }
 table.mini td input[type="number"] { width: 70px; }
 tr.joined td:first-child input { border-left: 3px solid var(--accent); }
+.draw-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#print-root { display: none; }
+@media print {
+  @page { size: A3 landscape; margin: 10mm; }
+  html, body { background: #fff !important; }
+  body { padding: 0 !important; margin: 0 !important; }
+  body > *:not(#print-root) { display: none !important; }
+  #print-root { display: block !important; }
+}
+#print-root { --surface: #fff; --ink: #111; --muted: #444; --line: #cfcfcf; --wet: #e4efeb; --accent: #0f5c78; --accent-soft: #e6f0f4; --bg: #fff; color: #111; color-scheme: light; }
+.sheet { width: 400mm; height: 277mm; box-sizing: border-box; border: 0.6mm solid #111; display: grid; grid-template-columns: 1fr 64mm; break-after: page; page-break-after: always; overflow: hidden; background: #fff; }
+.sheet:last-child { break-after: auto; page-break-after: auto; }
+.sheet-body { padding: 6mm; display: grid; gap: 5mm; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); align-content: start; }
+.sheet-cell { display: flex; flex-direction: column; align-items: center; gap: 2mm; }
+.sheet h4 { margin: 0 0 2mm; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; align-self: flex-start; }
+.sheet .plan { border: 0; background: none; padding: 0; }
+.sheet .plan svg { width: auto; height: auto; max-height: none; max-width: 100%; }
+.sheet table { font-size: 7.5pt; margin-bottom: 4mm; }
+.sheet th, .sheet td { padding: 1mm 1.5mm; border-bottom: 0.2mm solid #bbb; }
+.sheet.sched, .sched > div { min-width: 0; }
+.tb { border-left: 0.6mm solid #111; display: flex; flex-direction: column; font-size: 8pt; }
+.tb > div { border-bottom: 0.3mm solid #111; padding: 3mm; }
+.tb-firm { font-family: var(--font-display); font-weight: 800; font-size: 13pt; }
+.tb dl { margin: 0; }
+.tb dt { font-size: 6.5pt; text-transform: uppercase; letter-spacing: 0.06em; color: #555; }
+.tb dd { margin: 0 0 2mm; font-weight: 600; font-size: 9pt; }
+.tb-note { font-size: 7pt; color: #333; flex: 1; }
+.tb-brand { font-size: 7pt; color: #555; border-bottom: 0 !important; }
 .trace-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 99px; padding: 3px 4px 3px 12px; font-size: 0.85rem; background: var(--bg); }
 .trace-chip span { font-family: var(--font-num); color: var(--muted); font-size: 0.78rem; }
 .trace-chip button { padding: 1px 8px; border-radius: 99px; font-size: 0.8rem; }
@@ -249,7 +285,7 @@ details summary { cursor: pointer; font-weight: 600; }
           <input type="file" id="trace-file" accept="image/*,application/pdf,.pdf,.dxf,.dwg" hidden>
         </div>
       </div>
-      <p class="hint">A photo of a sketch, or a plan exported from Archicad or SketchUp as an image or PDF. You set the scale, outline each room, and it becomes an editable 2D plan and 3D model.</p>
+      <p class="hint">A photo of a sketch, a plan exported as an image or PDF, or a DXF file from Archicad, AutoCAD or SketchUp. You set the scale (DXF files bring their own), outline or check each room, and it becomes an editable 2D plan and 3D model.</p>
 
       <div id="tracer" class="tracer" hidden>
         <div class="trace-step" id="trace-step"></div>
@@ -301,6 +337,7 @@ details summary { cursor: pointer; font-weight: 600; }
         <h2>Design view</h2>
         <div class="viewswitch" role="group" aria-label="Design view">
           <button type="button" id="view-2d" aria-pressed="true">2D plan</button>
+          <button type="button" id="view-elev" aria-pressed="false">Elevations</button>
           <button type="button" id="view-3d" aria-pressed="false">3D model</button>
         </div>
       </div>
@@ -313,6 +350,10 @@ details summary { cursor: pointer; font-weight: 600; }
         <span class="hint" id="fl-note"></span>
         <button type="button" id="btn-mode" class="mode-btn"></button>
       </div>
+      <div class="draw-actions">
+        <button type="button" id="btn-print">Print drawings / PDF</button>
+        <button type="button" id="btn-dxf">Export DXF</button>
+      </div>
       <div class="view-opts">
         <label class="inline" for="opt-dims"><input type="checkbox" id="opt-dims" checked>Show measurements</label>
         <label class="inline" for="opt-names"><input type="checkbox" id="opt-names" checked>Show room names</label>
@@ -321,6 +362,11 @@ details summary { cursor: pointer; font-weight: 600; }
       <div id="pane-2d" class="pane">
         <div class="plans" id="plans"></div>
         <p class="hint">A first-draft block plan to start sketching from. Rooms are drawn at exactly the sizes in the room schedule. Hatched areas are leftover space: make a room bigger to use it, or keep it as passage or storage.</p>
+      </div>
+
+      <div id="pane-elev" class="pane" hidden>
+        <div class="plans elevs" id="elevs"></div>
+        <p class="hint">Generated from the design: walls, doors, windows, floor levels and roof. Heights are above ground level (±0.00).</p>
       </div>
 
       <div id="pane-3d" class="pane" hidden>
@@ -395,6 +441,10 @@ details summary { cursor: pointer; font-weight: 600; }
   <section role="tabpanel" id="p-approval" aria-labelledby="t-approval" hidden>
     <div class="card">
       <div class="top"><h2>Before you submit to Lands</h2><div id="check-score"></div></div>
+      <div class="grid">
+        <label for="sheet-arch">Your name or firm on the drawings<input id="sheet-arch" data-bind="sheet.architect" placeholder="e.g. Amani Architects"></label>
+      </div>
+      <div><button type="button" class="primary" id="btn-print2">Print approval drawings / PDF</button></div>
       <div class="checks" id="checks"></div>
     </div>
     <div class="card">
@@ -471,8 +521,9 @@ details summary { cursor: pointer; font-weight: 600; }
     </div>
   </section>
 
-  <footer class="small muted">Ramani Desk 1.6. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
+  <footer class="small muted">Ramani Desk 2.0. Estimates and checks are a first pass to guide early decisions. Final drawings, structural design and bills of quantities still come from the engineer and quantity surveyor.</footer>
 </div>
+<div id="print-root" aria-hidden="true"></div>
 
 <script>
 const KEY = "ramani-projects-v1", PKEY = "ramani-prices-v1", CKEY = "ramani-current-v1";
@@ -663,44 +714,42 @@ function sharedWithPartner(fl, x, side) {
   return partners(fl, x).some(o => SIDES.some(s => { const f = edgeOf(o, s); return f.h === e.h && Math.abs(f.c - e.c) < EPS && Math.min(e.b, f.b) - Math.max(e.a, f.a) > 0.3; }));
 }
 // Fit a door near one end and a window in the rest of the same wall.
+// Windows go on outside walls; doors open onto the corridor or open space, else into the next room.
 function autoOpenings(fl, x, manual) {
   const r = x.r, t = TYPES[r.type], out = [];
   const sides = SIDES.filter(s => !sharedWithPartner(fl, x, s)).map(s => {
-    const e = edgeOf(x, s);
-    return { s, e, len: e.b - e.a, ext: isExteriorAt(fl, e.h, e.c, (e.a + e.b) / 2, manual) };
+    const e = edgeOf(x, s), mid = (e.a + e.b) / 2;
+    return { s, e, len: e.b - e.a, bbox: onBbox(fl, e), covered: coverCount(fl, e.h, e.c, mid) >= 2 };
   });
-  const ext = sides.filter(o => o.ext).sort((a, b) => b.len - a.len);
-  const inner = sides.filter(o => !o.ext);
+  const outside = sides.filter(o => o.bbox).sort((a, b) => b.len - a.len);
+  const cx = fl.W / 2, cy = fl.D / 2, mx = x.x + x.w / 2, my = x.y + x.d / 2;
+  const toCentre = s => s === "front" ? my - cy : s === "back" ? cy - my : s === "left" ? mx - cx : cx - mx;
   const doors = [];
   if (r.type === "living" && r.floor === 0) {
-    const f = ext.find(o => o.s === "front") || ext[0];
-    if (f && f.len >= 1.6) doors.push({ kind: "door", side: f.s, w: 1.2, main: true, len: f.len });
+    const f = outside.find(o => o.s === "front") || outside[0];
+    if (f && f.len >= 1.6) doors.push({ side: f.s, w: 1.2, main: true, len: f.len });
   }
-  if (r.type !== "living" || !doors.length || inner.length) {
-    let side = null;
-    if (fl.cor) side = x.y + x.d / 2 < fl.cor.y ? "back" : "front";
-    else if (inner.length) {
-      const cx = fl.W / 2, cy = fl.D / 2, mx = x.x + x.w / 2, my = x.y + x.d / 2;
-      const score = s => s === "front" ? my - cy : s === "back" ? cy - my : s === "left" ? mx - cx : cx - mx;
-      side = inner.slice().sort((a, b) => score(b.s) - score(a.s))[0].s;
-    }
-    const sd = side && sides.find(o => o.s === side && !o.ext) || (!fl.cor && inner[0]) || null;
-    if (sd && !(r.type === "living" && doors.length && !inner.length)) {
-      const w = r.type === "stair" ? 1.0 : (t.wet && r.type !== "kitchen") ? 0.7 : 0.9;
-      if (sd.len >= w + 0.2) doors.push({ kind: "door", side: sd.s, w, len: sd.len });
-    }
+  let side = null;
+  if (fl.cor) side = sides.find(o => o.s === (my < fl.cor.y ? "back" : "front") && !o.bbox) || null;
+  if (!side) {
+    const inner = sides.filter(o => !o.bbox);
+    side = inner.slice().sort((a, b) => (a.covered - b.covered) || (toCentre(b.s) - toCentre(a.s)))[0] || null;
   }
-  doors.forEach(d => { d.pos = Math.min(0.5, (0.15 + d.w / 2) / d.len); out.push({ kind: "door", side: d.side, pos: +d.pos.toFixed(3), w: d.w, main: !!d.main }); });
+  if (side) {
+    const w = r.type === "stair" ? 1.0 : (t.wet && r.type !== "kitchen") ? 0.7 : 0.9;
+    if (side.len >= w + 0.2 && !(doors[0] && doors[0].side === side.s)) doors.push({ side: side.s, w, len: side.len });
+  }
+  doors.forEach(d => out.push({ kind: "door", side: d.side, pos: +Math.min(0.5, (0.15 + d.w / 2) / d.len).toFixed(3), w: d.w, main: !!d.main }));
   const area = x.w * x.d * (+r.win || 0) / 100;
-  if (area > 0.05 && ext.length) {
+  const winSide = outside[0] || sides.filter(o => !o.covered).sort((a, b) => b.len - a.len)[0];
+  if (area > 0.05 && winSide) {
     const wet = t.wet && r.type !== "kitchen", hh = wet ? 0.6 : 1.2, sill = wet ? 1.5 : 0.9;
-    const s = ext[0], d = out.find(o => o.side === s.s);
-    let lo = 0.3, hi = s.len - 0.3;
-    if (d) { const dc = d.pos * s.len; if (dc < s.len / 2) lo = dc + d.w / 2 + 0.3; else hi = dc - d.w / 2 - 0.3; }
-    const room4 = hi - lo;
-    if (room4 >= 0.6) {
-      const w = Math.min(room4, Math.max(0.6, area / hh));
-      out.push({ kind: "window", side: s.s, pos: +(((lo + hi) / 2) / s.len).toFixed(3), w: r05(w), h: hh, sill });
+    const d = out.find(o => o.side === winSide.s);
+    let lo = 0.3, hi = winSide.len - 0.3;
+    if (d) { const dc = d.pos * winSide.len; if (dc < winSide.len / 2) lo = dc + d.w / 2 + 0.3; else hi = dc - d.w / 2 - 0.3; }
+    if (hi - lo >= 0.6) {
+      const w = Math.min(hi - lo, Math.max(0.6, area / hh));
+      out.push({ kind: "window", side: winSide.s, pos: +(((lo + hi) / 2) / winSide.len).toFixed(3), w: r05(w), h: hh, sill });
     }
   }
   return out;
@@ -817,6 +866,74 @@ function planSVG(fl, opt = {}) {
     s += `<text class="dim" x="${W / 2}" y="-55">${fl.W.toFixed(2)} m</text>`;
     s += `<line class="dl" x1="-45" y1="0" x2="-45" y2="${D}"/><line class="dl" x1="-55" y1="0" x2="-35" y2="0"/><line class="dl" x1="-55" y1="${D}" x2="-35" y2="${D}"/>`;
     s += `<text class="dim" transform="translate(-55 ${D / 2}) rotate(-90)">${fl.D.toFixed(2)} m</text>`;
+  }
+  return s + "</svg>";
+}
+
+/* ---------- Elevations ---------- */
+const ELEV_NAME = { front: "Front elevation", right: "Right side elevation", back: "Back elevation", left: "Left side elevation" };
+function elevSVG(side, L, opt = {}) {
+  L = L.filter(fl => fl.W && fl.D);
+  if (!L.length) return '<p class="hint">Add rooms to see the elevations.</p>';
+  const H = +P.height || 3, SL = 0.2, FH = H + SL, S = 100, o = ROOF.o;
+  const Wm = Math.max(...L.map(f => f.W)), Dm = Math.max(...L.map(f => f.D));
+  const alongX = side === "front" || side === "back";
+  const span = alongX ? Wm : Dm;
+  // Mirror where needed so each view reads as seen standing outside that face.
+  const u = v => (side === "front" ? Wm - v : side === "right" ? Dm - v : v) * S;
+  const y = h => -h * S;
+  const top = L[L.length - 1], rd = roofDims(top), type = P.roofType || "gable";
+  const eave = top.f * FH + SL + H, roofTop = type === "flat" ? eave + 0.9 : eave + rd.rise;
+  const dims = opt.dims ?? VIEW.dims;
+  const vb = [-o * S - 190, y(roofTop) - 80, (span + 2 * o) * S + 520, roofTop * S + 160];
+  const size = opt.scale ? ` width="${(vb[2] / S * 1000 / opt.scale).toFixed(1)}mm" height="${(vb[3] / S * 1000 / opt.scale).toFixed(1)}mm"` : "";
+  let s = `<svg viewBox="${vb.join(" ")}"${size} role="img" aria-label="${ELEV_NAME[side]}">`;
+  const span2 = (a, b) => [Math.min(u(a), u(b)), Math.abs(u(b) - u(a))];
+  L.forEach(fl => {
+    const base = fl.f * FH, len = alongX ? fl.W : fl.D;
+    const [x0, w] = span2(0, len);
+    s += `<rect class="ewall" x="${x0}" y="${y(base + FH)}" width="${w}" height="${FH * S}"/>`;
+    s += `<line class="eslab" x1="${x0}" y1="${y(base + SL)}" x2="${x0 + w}" y2="${y(base + SL)}"/>`;
+    const lineC = side === "front" ? 0 : side === "back" ? fl.D : side === "left" ? 0 : fl.W;
+    wallsOf(fl, P).gaps.filter(g => g.h === alongX && Math.abs(g.c - lineC) < EPS).forEach(g => {
+      const [gx, gw] = span2(g.a, g.b);
+      if (g.kind === "window") {
+        const sill = +g.o.sill || 0.9, hh = +g.o.h || 1.2;
+        s += `<rect class="ewin" x="${gx}" y="${y(base + SL + sill + hh)}" width="${gw}" height="${hh * S}"/>`;
+        if (gw > 80) s += `<line class="emull" x1="${gx + gw / 2}" y1="${y(base + SL + sill + hh)}" x2="${gx + gw / 2}" y2="${y(base + SL + sill)}"/>`;
+      } else {
+        s += `<rect class="edoor" x="${gx}" y="${y(base + SL + DOOR_H)}" width="${gw}" height="${DOOR_H * S}"/>`;
+      }
+    });
+  });
+  // roof
+  const tl = alongX ? top.W : top.D;
+  const r0 = u(-o), r1 = u(tl + o), rm = u(tl / 2), ridgeHere = rd.along === alongX;
+  const pt = (x, h) => `${x},${y(h)}`;
+  if (type === "flat") {
+    const [x0, w] = span2(0, tl);
+    s += `<rect class="ewall" x="${x0}" y="${y(eave + 0.9)}" width="${w}" height="${0.9 * S}"/><line class="eslab" x1="${x0}" y1="${y(eave)}" x2="${x0 + w}" y2="${y(eave)}"/>`;
+  } else if (ridgeHere && type === "gable") {
+    s += `<polygon class="eroof" points="${pt(r0, eave)} ${pt(r1, eave)} ${pt(r1, eave + rd.rise)} ${pt(r0, eave + rd.rise)}"/>`;
+  } else if (ridgeHere && type === "hip") {
+    const k = rd.half * S, lo = Math.min(r0, r1), hi = Math.max(r0, r1);
+    const a = Math.min(lo + k, (lo + hi) / 2), b = Math.max(hi - k, (lo + hi) / 2);
+    s += `<polygon class="eroof" points="${pt(lo, eave)} ${pt(hi, eave)} ${pt(b, eave + rd.rise)} ${pt(a, eave + rd.rise)}"/>`;
+  } else {
+    s += `<polygon class="eroof" points="${pt(r0, eave)} ${pt(r1, eave)} ${pt(rm, eave + rd.rise)}"/>`;
+  }
+  s += `<line class="eground" x1="${u(0) - 1.2 * S * (side === "front" || side === "right" ? -1 : 1)}" y1="0" x2="${u(span) + 1.2 * S * (side === "front" || side === "right" ? -1 : 1)}" y2="0"/>`;
+  if (dims) {
+    const lx = Math.max(u(0), u(span), r0, r1) + 40;
+    const fs = Math.max(22, Math.max(span, roofTop) * 3.4);
+    const lev = (h, t) => s += `<line class="dl" x1="${lx - 15}" y1="${y(h)}" x2="${lx + 15}" y2="${y(h)}"/><text class="dim elev-l" style="font-size:${fs}px" x="${lx + 22}" y="${y(h) + fs / 3}">${t}</text>`;
+    lev(0, "±0.00");
+    L.forEach(fl => lev(fl.f * FH + SL, (fl.f === 0 ? "FFL +" : "+") + (fl.f * FH + SL).toFixed(2)));
+    lev(eave, "+" + eave.toFixed(2));
+    if (type !== "flat") lev(roofTop, "+" + roofTop.toFixed(2));
+    const dx = Math.min(u(0), u(span), r0, r1) - 60;
+    s += `<line class="dl" x1="${dx}" y1="0" x2="${dx}" y2="${y(roofTop)}"/><line class="dl" x1="${dx - 10}" y1="0" x2="${dx + 10}" y2="0"/><line class="dl" x1="${dx - 10}" y1="${y(roofTop)}" x2="${dx + 10}" y2="${y(roofTop)}"/>`;
+    s += `<text class="dim" style="font-size:${fs}px" transform="translate(${dx - 14} ${y(roofTop / 2)}) rotate(-90)">${roofTop.toFixed(2)} m</text>`;
   }
   return s + "</svg>";
 }
@@ -1056,6 +1173,7 @@ function renderOutputs() {
   const L = layout(P);
   // design
   $("plans").innerHTML = L.map(fl => `<div class="plan"><div class="eyebrow">${floorName(fl.f)}</div>${planSVG(fl)}</div>`).join("");
+  $("elevs").innerHTML = ["front", "right", "back", "left"].map(sd => `<div class="plan"><div class="eyebrow">${ELEV_NAME[sd]}</div>${elevSVG(sd, L)}</div>`).join("");
   const Q = quantities(P, L), C = costOf(P, Q, prices);
   const g = L[0] || { W: 0, D: 0 };
   const beds = P.rooms.filter(r => TYPES[r.type].bed).length;
@@ -1220,6 +1338,270 @@ $("btn-copy").addEventListener("click", async () => {
   setTimeout(() => b.textContent = "Copy", 1500);
 });
 
+/* ---------- Drawing sheets for approval (print or save as PDF) ---------- */
+// A3 landscape inside 10 mm page margins; drawings are placed at a true scale.
+const SHEET = { w: 400, h: 277, tb: 64 };
+function pickScale(items, cols, rows) {
+  const cw = (SHEET.w - SHEET.tb - 14) / cols - 4, ch = (SHEET.h - 14) / rows - 14;
+  for (const sc of [50, 100, 125, 200, 250, 500]) if (items.every(it => it.w * 1000 / sc <= cw && it.h * 1000 / sc <= ch)) return sc;
+  return 1000;
+}
+function openingSchedule(L) {
+  const rows = []; let d = 0, w = 0;
+  L.forEach(fl => fl.W && wallsOf(fl, P).gaps.forEach(g => {
+    const mark = g.kind === "door" ? "D" + String(++d).padStart(2, "0") : "W" + String(++w).padStart(2, "0");
+    rows.push({ mark, kind: g.kind === "door" ? (g.o.main ? "Main door" : "Door") : "Window", room: g.x.r.name, floor: floorName(fl.f), side: SIDE_LABEL[g.side],
+      w: g.b - g.a, h: g.kind === "door" ? DOOR_H : (+g.o.h || 1.2), sill: g.kind === "door" ? null : (+g.o.sill || 0.9) });
+  }));
+  return rows;
+}
+function buildSheets() {
+  const L = layout(P).filter(fl => fl.W && fl.D);
+  if (!L.length) return "";
+  const H = +P.height || 3, FH = H + 0.2, rd = roofDims(L[L.length - 1]);
+  const roofTop = (L[L.length - 1].f * FH + 0.2 + H) + ((P.roofType || "gable") === "flat" ? 0.9 : rd.rise);
+  const sheets = [];
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+  const tb = (title, scale, no) => `<div class="tb">
+    <div class="tb-firm">${esc(P.sheet?.architect || "Architect")}</div>
+    <div><dl>
+      <dt>Project</dt><dd>${esc(P.name || "Untitled project")}</dd>
+      <dt>Client</dt><dd>${esc(P.client || "–")}</dd>
+      <dt>Location</dt><dd>${esc(P.region || "–")}; plot ${(+P.plotW || 0)} × ${(+P.plotD || 0)} m</dd>
+      <dt>Drawing</dt><dd>${title}</dd>
+      <dt>Scale</dt><dd>${scale ? "1:" + scale + " at A3" : "Not to scale"}</dd>
+      <dt>Date</dt><dd>${today}</dd>
+      <dt>Revision</dt><dd>${P.fees?.revsUsed ? "Rev " + P.fees.revsUsed : "First issue"}</dd>
+      <dt>Sheet</dt><dd>${no} of {N}</dd>
+    </dl></div>
+    <div class="tb-note">Plot front faces ${({ 180: "south", 0: "north", 90: "east", 270: "west" })[P.front3d ?? 180]}. Drawings for approval; structural design by the engineer, quantities by the quantity surveyor.</div>
+    <div class="tb-brand">Prepared with Ramani Desk</div>
+  </div>`;
+  // plans, up to four floors per sheet
+  for (let i = 0; i < L.length; i += 4) {
+    const part = L.slice(i, i + 4), cols = part.length === 1 ? 1 : 2, rows = Math.ceil(part.length / cols);
+    const sc = pickScale(part.map(fl => ({ w: fl.W + 1.1, h: fl.D + 1.1 })), cols, rows);
+    sheets.push({ title: L.length > 4 ? `Floor plans (${i + 1}–${i + part.length})` : "Floor plans", scale: sc, body:
+      `<div class="sheet-body" style="--cols:${cols}">${part.map(fl => `<div class="sheet-cell plan"><h4>${floorName(fl.f)}</h4>${planSVG(fl, { scale: sc, dims: true, names: true })}</div>`).join("")}</div>` });
+  }
+  // elevations
+  const Wm = Math.max(...L.map(f => f.W)), Dm = Math.max(...L.map(f => f.D));
+  const esc_ = sd => ({ w: ((sd === "front" || sd === "back") ? Wm : Dm) + 2 * ROOF.o + 7.1, h: roofTop + 2.4 });
+  // two elevations per sheet, one above the other, so they fit at 1:100 on most houses
+  [["front", "back"], ["right", "left"]].forEach((pair, i) => {
+    const sc = pickScale(pair.map(esc_), 1, 2);
+    sheets.push({ title: i ? "Side elevations" : "Front and back elevations", scale: sc, body:
+      `<div class="sheet-body" style="--cols:1">${pair.map(sd => `<div class="sheet-cell plan"><h4>${ELEV_NAME[sd]}</h4>${elevSVG(sd, L, { scale: sc, dims: true })}</div>`).join("")}</div>` });
+  });
+  // schedules
+  const rs = L.flatMap(fl => fl.rects.filter(x => labelPart(fl, x)).map(x => ({ fl, x, area: groupArea(fl, x) })));
+  const ops = openingSchedule(L);
+  const plotA = (+P.plotW || 0) * (+P.plotD || 0), total = L.reduce((t, fl) => t + fl.W * fl.D, 0);
+  const K = checks(P, layout(P));
+  sheets.push({ title: "Schedules and areas", scale: null, body: `<div class="sheet-body sched" style="--cols:2">
+    <div><h4>Room schedule</h4><table><thead><tr><th>Room</th><th>Floor</th><th class="num">Size m</th><th class="num">Area m²</th></tr></thead><tbody>
+      ${rs.map(o => `<tr><td>${esc(o.x.r.name)}</td><td>${floorName(o.fl.f)}</td><td class="num">${o.x.w.toFixed(2)} × ${o.x.d.toFixed(2)}${partners(o.fl, o.x).length ? " +" : ""}</td><td class="num">${o.area.toFixed(1)}</td></tr>`).join("")}
+    </tbody></table>
+    <h4>Areas</h4><table><tbody>
+      ${L.map(fl => `<tr><td>${floorName(fl.f)}</td><td class="num">${(fl.W * fl.D).toFixed(1)} m²</td></tr>`).join("")}
+      <tr><td><b>Total floor area</b></td><td class="num"><b>${total.toFixed(1)} m²</b></td></tr>
+      <tr><td>Ground footprint</td><td class="num">${(L[0].W * L[0].D).toFixed(1)} m²</td></tr>
+      <tr><td>Plot area</td><td class="num">${plotA.toFixed(0)} m²</td></tr>
+      <tr><td>Plot coverage</td><td class="num">${plotA ? (L[0].W * L[0].D / plotA * 100).toFixed(0) + "%" : "–"}</td></tr>
+      <tr><td>Room height / roof</td><td class="num">${H.toFixed(2)} m / ${({ gable: "Gable", hip: "Hip", flat: "Flat with parapet" })[P.roofType || "gable"]}</td></tr>
+    </tbody></table></div>
+    <div><h4>Door and window schedule</h4><table><thead><tr><th>Mark</th><th>Type</th><th>Room</th><th>Wall</th><th class="num">W × H m</th><th class="num">Sill m</th></tr></thead><tbody>
+      ${ops.map(o => `<tr><td>${o.mark}</td><td>${o.kind}</td><td>${esc(o.room)}${L.length > 1 ? " (" + o.floor.replace(" floor", "") + ")" : ""}</td><td>${o.side}</td><td class="num">${o.w.toFixed(2)} × ${o.h.toFixed(2)}</td><td class="num">${o.sill == null ? "–" : o.sill.toFixed(2)}</td></tr>`).join("")}
+    </tbody></table>
+    <h4>Checks before submission</h4><table><tbody>
+      ${K.map(k => `<tr><td>${k.status === "ok" ? "✓" : k.status === "fail" ? "✗" : "?"}</td><td>${k.title}</td></tr>`).join("")}
+    </tbody></table></div>
+  </div>` });
+  const N = sheets.length;
+  return sheets.map((sh, i) => `<section class="sheet">${sh.body}${tb(sh.title, sh.scale, i + 1).replace("{N}", N)}</section>`).join("");
+}
+function printDrawings() {
+  const html = buildSheets();
+  if (!html) { toast("Add some rooms first."); return; }
+  $("print-root").innerHTML = html;
+  setTimeout(() => window.print(), 60);
+}
+window.addEventListener("beforeprint", () => { if (!$("print-root").innerHTML) $("print-root").innerHTML = buildSheets(); });
+window.addEventListener("afterprint", () => { $("print-root").innerHTML = ""; });
+
+/* ---------- DXF export (opens in Archicad, AutoCAD, SketchUp) ---------- */
+// Plain DXF R12 in millimetres. Floors are laid out side by side; walls, doors, windows, text and dimensions on their own layers.
+function buildDXF() {
+  const L = layout(P).filter(fl => fl.W && fl.D);
+  const o = [];
+  const put = (...kv) => { for (let i = 0; i < kv.length; i += 2) o.push(String(kv[i]), String(kv[i + 1])); };
+  const mm = v => (v * 1000).toFixed(1);
+  const layers = [["WALLS", 7], ["DOORS", 1], ["WINDOWS", 5], ["TEXT", 7], ["DIMS", 3], ["SPARE", 8]];
+  put(0, "SECTION", 2, "HEADER", 9, "$ACADVER", 1, "AC1009", 9, "$INSUNITS", 70, 4, 0, "ENDSEC");
+  put(0, "SECTION", 2, "TABLES", 0, "TABLE", 2, "LAYER", 70, layers.length);
+  layers.forEach(([n, c]) => put(0, "LAYER", 2, n, 70, 0, 62, c, 6, "CONTINUOUS"));
+  put(0, "ENDTAB", 0, "ENDSEC", 0, "SECTION", 2, "ENTITIES");
+  let ox = 0;
+  L.forEach(fl => {
+    const X = x => mm(ox + x), Y = y => mm(-y);
+    const line = (layer, x1, y1, x2, y2) => put(0, "LINE", 8, layer, 10, X(x1), 20, Y(y1), 30, 0, 11, X(x2), 21, Y(y2), 31, 0);
+    const text = (layer, x, y, h, str, centre = true) => centre
+      ? put(0, "TEXT", 8, layer, 10, X(x), 20, Y(y), 30, 0, 40, mm(h), 1, str, 72, 1, 11, X(x), 21, Y(y), 31, 0)
+      : put(0, "TEXT", 8, layer, 10, X(x), 20, Y(y), 30, 0, 40, mm(h), 1, str);
+    const Wl = wallsOf(fl, P);
+    Wl.segs.forEach(g => {
+      const a = g.a - g.t / 2, b = g.b + g.t / 2, t = g.t / 2;
+      if (g.h) { line("WALLS", a, g.c - t, b, g.c - t); line("WALLS", a, g.c + t, b, g.c + t); line("WALLS", a, g.c - t, a, g.c + t); line("WALLS", b, g.c - t, b, g.c + t); }
+      else { line("WALLS", g.c - t, a, g.c - t, b); line("WALLS", g.c + t, a, g.c + t, b); line("WALLS", g.c - t, a, g.c + t, a); line("WALLS", g.c - t, b, g.c + t, b); }
+    });
+    Wl.gaps.forEach(g => {
+      const t = g.t / 2;
+      if (g.kind === "window") {
+        if (g.h) { [-t, 0, t].forEach(d => line("WINDOWS", g.a, g.c + d, g.b, g.c + d)); line("WINDOWS", g.a, g.c - t, g.a, g.c + t); line("WINDOWS", g.b, g.c - t, g.b, g.c + t); }
+        else { [-t, 0, t].forEach(d => line("WINDOWS", g.c + d, g.a, g.c + d, g.b)); line("WINDOWS", g.c - t, g.a, g.c + t, g.a); line("WINDOWS", g.c - t, g.b, g.c + t, g.b); }
+      } else {
+        const n = INWARD[g.side], w = g.b - g.a;
+        const hinge = g.h ? [g.a, g.c] : [g.c, g.a], tip = g.h ? [g.a, g.c + n * w] : [g.c + n * w, g.a], end = g.h ? [g.b, g.c] : [g.c, g.b];
+        line("DOORS", hinge[0], hinge[1], tip[0], tip[1]);
+        // DXF angles are anticlockwise in drawing coordinates, where Y is flipped from the plan
+        const ang = pt => (Math.atan2(-(pt[1] - hinge[1]), pt[0] - hinge[0]) * 180 / Math.PI + 360) % 360;
+        let a1 = ang(tip), a2 = ang(end);
+        if (((a2 - a1 + 360) % 360) > 180) [a1, a2] = [a2, a1];
+        put(0, "ARC", 8, "DOORS", 10, X(hinge[0]), 20, Y(hinge[1]), 30, 0, 40, mm(w), 50, a1.toFixed(2), 51, a2.toFixed(2));
+      }
+    });
+    (fl.fill || []).forEach(x => { line("SPARE", x.x, x.y, x.x + x.w, x.y + x.d); line("SPARE", x.x + x.w, x.y, x.x, x.y + x.d); });
+    fl.rects.forEach(x => {
+      if (labelPart(fl, x)) text("TEXT", x.x + x.w / 2, x.y + x.d / 2 - 0.15, 0.25, x.r.name);
+      text("TEXT", x.x + x.w / 2, x.y + x.d / 2 + 0.25, 0.18, `${x.w.toFixed(2)} x ${x.d.toFixed(2)}`);
+    });
+    text("TEXT", 0, -1.6, 0.4, floorName(fl.f).toUpperCase(), false);
+    line("DIMS", 0, -0.7, fl.W, -0.7); line("DIMS", 0, -0.85, 0, -0.55); line("DIMS", fl.W, -0.85, fl.W, -0.55);
+    text("DIMS", fl.W / 2, -0.9, 0.2, fl.W.toFixed(2));
+    line("DIMS", -0.7, 0, -0.7, fl.D); line("DIMS", -0.85, 0, -0.55, 0); line("DIMS", -0.85, fl.D, -0.55, fl.D);
+    text("DIMS", -1.3, fl.D / 2, 0.2, fl.D.toFixed(2));
+    ox += fl.W + 6;
+  });
+  put(0, "ENDSEC", 0, "EOF");
+  return o.join("\r\n") + "\r\n";
+}
+function exportDXF() {
+  if (!layout(P).some(fl => fl.W)) { toast("Add some rooms first."); return; }
+  const blob = new Blob([buildDXF()], { type: "application/dxf" }), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = (P.name || "plan").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") + ".dxf";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("DXF saved to your downloads. It opens in Archicad, AutoCAD and SketchUp, in millimetres.");
+}
+
+/* ---------- DXF import ---------- */
+// Reads lines, polylines, arcs and text; finds closed rectangles as rooms; opens the result in the tracer to check.
+function parseDXF(text) {
+  const raw = text.split(/\r?\n/), pairs = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) pairs.push([parseInt(raw[i].trim(), 10), raw[i + 1].trim()]);
+  let units = null, inEnt = false, cur = null, poly = null;
+  const ents = [];
+  const flush = () => { if (cur) ents.push(cur); cur = null; };
+  for (let i = 0; i < pairs.length; i++) {
+    const [c, v] = pairs[i];
+    if (c === 9 && v === "$INSUNITS") { const n = pairs.slice(i + 1, i + 4).find(p => p[0] === 70); if (n) units = +n[1]; }
+    if (c === 0 && v === "SECTION") { const n = pairs[i + 1]; inEnt = n && n[1] === "ENTITIES"; continue; }
+    if (!inEnt) continue;
+    if (c === 0) {
+      if (v === "ENDSEC") { flush(); inEnt = false; continue; }
+      if (cur && cur.type === "VERTEX" && poly) { poly.pts.push([cur.x, cur.y]); cur = null; }
+      else if (cur && cur.type === "POLYLINE") { poly = cur; cur = null; }
+      else flush();
+      if (v === "SEQEND") { if (poly) ents.push(poly); poly = null; continue; }
+      cur = { type: v, pts: [] }; continue;
+    }
+    if (!cur) continue;
+    const n = parseFloat(v);
+    if (c === 10) { if (cur.type === "LWPOLYLINE") cur.pts.push([n, 0]); else cur.x = n; }
+    else if (c === 20) { if (cur.type === "LWPOLYLINE") cur.pts[cur.pts.length - 1][1] = n; else cur.y = n; }
+    else if (c === 11) cur.x2 = n; else if (c === 21) cur.y2 = n;
+    else if (c === 40) cur.r = n; else if (c === 50) cur.a1 = n; else if (c === 51) cur.a2 = n;
+    else if (c === 70) cur.flags = parseInt(v, 10);
+    else if (c === 1) cur.text = (cur.text || "") + v;
+    else if (c === 3 && cur.type === "MTEXT") cur.text = (cur.text || "") + v;
+  }
+  flush();
+  return { ents, units };
+}
+const UNIT_M = { 1: 0.0254, 2: 0.3048, 4: 0.001, 5: 0.01, 6: 1 };
+function guessType(name) {
+  const t = (name || "").toLowerCase();
+  if (/master/.test(t)) return "master";
+  if (/bed|chumba/.test(t)) return "bed";
+  if (/en-?suite|bath|shower|toilet|wc|choo/.test(t)) return /wc|toilet|choo/.test(t) && !/bath/.test(t) ? "wc" : "bath";
+  if (/kitchen|jiko/.test(t)) return "kitchen";
+  if (/living|sitting|lounge|sebule/.test(t)) return "living";
+  if (/dining/.test(t)) return "dining";
+  if (/store|pantry|stoo/.test(t)) return "store";
+  if (/office|study/.test(t)) return "office";
+  if (/stair|ngazi/.test(t)) return "stair";
+  return null;
+}
+async function importDXF(file) {
+  const { ents, units } = parseDXF(await file.text());
+  const pts = [];
+  ents.forEach(e => {
+    if (e.type === "LINE") pts.push([e.x, e.y], [e.x2, e.y2]);
+    else if ((e.type === "LWPOLYLINE" || e.type === "POLYLINE") && e.pts.length) pts.push(...e.pts);
+    else if ((e.type === "ARC" || e.type === "CIRCLE") && e.r) pts.push([e.x - e.r, e.y - e.r], [e.x + e.r, e.y + e.r]);
+  });
+  const ok = pts.filter(p => isFinite(p[0]) && isFinite(p[1]));
+  if (ok.length < 2) throw new Error("empty");
+  const minX = Math.min(...ok.map(p => p[0])), maxX = Math.max(...ok.map(p => p[0])), minY = Math.min(...ok.map(p => p[1])), maxY = Math.max(...ok.map(p => p[1]));
+  const span = Math.max(maxX - minX, maxY - minY) || 1;
+  const um = UNIT_M[units] || (span > 300 ? 0.001 : span > 60 ? 0.01 : 1); // guess millimetres, centimetres or metres
+  const k = 2200 / span, M = 100;
+  const c = document.createElement("canvas"); c.width = Math.ceil((maxX - minX) * k + 2 * M); c.height = Math.ceil((maxY - minY) * k + 2 * M);
+  const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height);
+  const px = x => (x - minX) * k + M, py = y => (maxY - y) * k + M;
+  g.strokeStyle = "#111"; g.lineWidth = 2;
+  ents.forEach(e => {
+    g.beginPath();
+    if (e.type === "LINE") { g.moveTo(px(e.x), py(e.y)); g.lineTo(px(e.x2), py(e.y2)); }
+    else if ((e.type === "LWPOLYLINE" || e.type === "POLYLINE") && e.pts.length > 1) { e.pts.forEach((p, i) => i ? g.lineTo(px(p[0]), py(p[1])) : g.moveTo(px(p[0]), py(p[1]))); if (e.flags & 1) g.closePath(); }
+    else if (e.type === "CIRCLE") g.arc(px(e.x), py(e.y), e.r * k, 0, Math.PI * 2);
+    else if (e.type === "ARC") g.arc(px(e.x), py(e.y), e.r * k, -e.a1 * Math.PI / 180, -e.a2 * Math.PI / 180, true);
+    g.stroke();
+  });
+  g.fillStyle = "#555"; g.font = "16px sans-serif";
+  const texts = ents.filter(e => (e.type === "TEXT" || e.type === "MTEXT") && e.text).map(e => ({ x: e.x, y: e.y, s: e.text.replace(/\\[A-Za-z][^;]*;|\\P|[{}]/g, " ").trim() }));
+  texts.forEach(t => g.fillText(t.s, px(t.x), py(t.y)));
+  // closed axis-aligned rectangles between 1 m and 25 m become rooms
+  const mPer = um, rects = [];
+  ents.filter(e => (e.type === "LWPOLYLINE" || e.type === "POLYLINE") && e.pts.length >= 4).forEach(e => {
+    let p = e.pts.slice(); if (p.length === 5 && Math.hypot(p[0][0] - p[4][0], p[0][1] - p[4][1]) < 1e-6 * span) p = p.slice(0, 4);
+    if (p.length !== 4 || !((e.flags & 1) || e.pts.length === 5)) return;
+    const xs = [...new Set(p.map(q => q[0].toFixed(3)))], ys = [...new Set(p.map(q => q[1].toFixed(3)))];
+    if (xs.length !== 2 || ys.length !== 2) return;
+    const x0 = Math.min(...p.map(q => q[0])), x1 = Math.max(...p.map(q => q[0])), y0 = Math.min(...p.map(q => q[1])), y1 = Math.max(...p.map(q => q[1]));
+    const wm = (x1 - x0) * mPer, hm = (y1 - y0) * mPer;
+    if (wm < 1 || hm < 1 || wm > 25 || hm > 25) return;
+    if (rects.some(r => Math.abs(r.x0 - x0) + Math.abs(r.x1 - x1) + Math.abs(r.y0 - y0) + Math.abs(r.y1 - y1) < span * 1e-4)) return;
+    rects.push({ x0, x1, y0, y1 });
+  });
+  // drop an outline that just wraps several rooms
+  const inside = (a, b) => a.x0 >= b.x0 - 1e-9 && a.x1 <= b.x1 + 1e-9 && a.y0 >= b.y0 - 1e-9 && a.y1 <= b.y1 + 1e-9 && a !== b;
+  const rooms = rects.filter(r => rects.filter(q => inside(q, r)).length < 2);
+  T.pdf = null; $("trace-page-wrap").hidden = true; T.src = c;
+  startTrace();
+  T.mpp = mPer / k;
+  T.rooms = rooms.map((r, i) => {
+    const t = texts.find(t => t.x >= r.x0 && t.x <= r.x1 && t.y >= r.y0 && t.y <= r.y1);
+    const name = t ? t.s.split(/\s{2,}|\n/)[0].slice(0, 40) : "";
+    const type = guessType(name) || "bed";
+    return { x: px(r.x0), y: py(r.y1), w: (r.x1 - r.x0) * k, h: (r.y1 - r.y0) * k, type, name: name || TYPES[type].label + " " + (i + 1), id: newId() };
+  });
+  setTool("draw"); renderTraceList();
+  $("trace-step").textContent = rooms.length
+    ? `Found ${rooms.length} room${rooms.length === 1 ? "" : "s"} in the CAD file (scale read from the file). Check the names, remove any that aren't rooms, outline anything missed, then create the 2D and 3D.`
+    : "The scale was read from the CAD file, but no closed room outlines were found. Drag a box over each room to outline it.";
+}
+
 /* ---------- Layout mode ---------- */
 // "Move rooms myself" freezes the automatic layout into positions she can edit.
 function freezeLayout() {
@@ -1259,9 +1641,10 @@ async function pdfPage(n) {
 $("btn-upload").addEventListener("click", () => $("trace-file").click());
 $("trace-file").addEventListener("change", async e => {
   const f = e.target.files[0]; e.target.value = ""; if (!f) return;
-  if (/\.(dxf|dwg)$/i.test(f.name)) { toast("CAD files are coming in a later update. For now, export the plan from Archicad as a PDF or image and upload that."); return; }
+  if (/\.dwg$/i.test(f.name)) { toast("DWG files are locked to AutoCAD. In Archicad use File › Save As › DXF, then upload the .dxf file."); return; }
   const b = $("btn-upload"); b.disabled = true; b.textContent = "Opening…";
   try {
+    if (/\.dxf$/i.test(f.name)) { await importDXF(f); b.disabled = false; b.textContent = "Upload drawing"; return; }
     if (f.type === "application/pdf" || /\.pdf$/i.test(f.name)) {
       await loadScript("vendor/pdf.min.js");
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
@@ -1274,7 +1657,7 @@ $("trace-file").addEventListener("change", async e => {
     }
     startTrace();
   } catch (err) {
-    toast("Couldn't open that file. Try a JPG, PNG or PDF.");
+    toast(/\.dxf$/i.test(f.name) ? "Couldn't read that DXF. Save it from Archicad as DXF (AutoCAD R12 or 2000 format) and try again." : "Couldn't open that file. Try a JPG, PNG, PDF or DXF.");
   }
   b.disabled = false; b.textContent = "Upload drawing";
 });
@@ -1688,8 +2071,7 @@ async function show3D() {
   V3.loading = false;
 }
 function setView(v) {
-  $("view-2d").setAttribute("aria-pressed", v === "2d"); $("view-3d").setAttribute("aria-pressed", v === "3d");
-  $("pane-2d").hidden = v !== "2d"; $("pane-3d").hidden = v !== "3d";
+  ["2d", "elev", "3d"].forEach(k => { $("view-" + k).setAttribute("aria-pressed", v === k); $("pane-" + k).hidden = v !== k; });
   try { localStorage.setItem("ramani-view-v1", v); } catch (e) {}
   if (v === "3d") show3D();
 }
@@ -1699,6 +2081,10 @@ $("opt-dims").checked = VIEW.dims; $("opt-names").checked = VIEW.names;
 }));
 $("view-2d").addEventListener("click", () => setView("2d"));
 $("view-3d").addEventListener("click", () => setView("3d"));
+$("view-elev").addEventListener("click", () => setView("elev"));
+$("btn-print").addEventListener("click", printDrawings);
+$("btn-dxf").addEventListener("click", exportDXF);
+$("btn-print2").addEventListener("click", printDrawings);
 $("v-roof").addEventListener("change", e => { V3.roof = e.target.checked; build3D(); });
 $("v-floors").addEventListener("change", e => { V3.floors = e.target.value; build3D(); });
 $("v-hour").addEventListener("input", e => {
@@ -1767,7 +2153,7 @@ if (navigator.storage && navigator.storage.persist) navigator.storage.persist().
 renderPrices();
 renderAll();
 renderBackup();
-try { if (localStorage.getItem("ramani-view-v1") === "3d") setView("3d"); } catch (e) {}
+try { const v = localStorage.getItem("ramani-view-v1"); if (v === "3d" || v === "elev") setView(v); } catch (e) {}
 </script>
 </body>
 </html>

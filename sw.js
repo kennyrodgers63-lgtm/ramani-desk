@@ -1,5 +1,5 @@
 // Ramani Desk service worker: keeps the app working with no internet.
-const VERSION = "ramani-v1.6.0";
+const VERSION = "ramani-v2.0.0";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png", "./vendor/three.min.js", "./vendor/pdf.min.js", "./vendor/pdf.worker.min.js"];
 
 self.addEventListener("install", e => {
